@@ -90,6 +90,10 @@ public class Graph<N extends Identifiable, L extends Comparable<L>, P extends Pa
 		return relation.link;
 	}
 
+	public HashArray<Relation<N, L, P>> getAllLinks(){
+    	return relations;
+	}
+
 	@SuppressWarnings("unchecked")
 	public List<P> getPaths(N nodeA, N nodeB) {
 		Relation<N, L, P> relation = relations.get(Relation.hash(nodeA.hashCode(), nodeB.hashCode()));

@@ -46,6 +46,7 @@ public abstract class BaseRMSAAlgorithm{
 	}
 
 	protected boolean allocateToHighestRankedPathAvailable(Demand demand, List<PartedPath> candidatePaths) throws NetworkException {
+		//TODO, if (random < epsilon), allocate according to matrix, otherwise, pick one randomly.
 		for (PartedPath path : candidatePaths)
 			if (demand.allocate(path))
 				return true;
