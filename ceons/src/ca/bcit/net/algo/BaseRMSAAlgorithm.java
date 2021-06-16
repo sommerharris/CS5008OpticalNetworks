@@ -8,6 +8,8 @@ import ca.bcit.net.spectrum.NoSpectrumAvailableException;
 import java.util.Collections;
 import java.util.List;
 
+import static ca.bcit.net.Simulation.EPSILON;
+
 public abstract class BaseRMSAAlgorithm{
 	public DemandAllocationResult allocateDemand(Demand demand, Network network) throws InstantiationException, ClassNotFoundException, IllegalAccessException {
 		try {
@@ -46,10 +48,22 @@ public abstract class BaseRMSAAlgorithm{
 	}
 
 	protected boolean allocateToHighestRankedPathAvailable(Demand demand, List<PartedPath> candidatePaths) throws NetworkException {
-		//TODO, if (random < epsilon), allocate according to matrix, otherwise, pick one randomly.
-		for (PartedPath path : candidatePaths)
-			if (demand.allocate(path))
-				return true;
+		double random = Math.random();
+		if (random < EPSILON){
+			//exploit - allocate according to metric - candidatePaths are sorted by metric in ascending order
+			for (PartedPath path : candidatePaths)
+				if (demand.allocate(path))
+					return true;
+		} else {
+			if (candidatePaths.isEmpty()){
+				return false;
+			}
+			//explore by random pick
+			int pick = (int) Math.floor(Math.random() * candidatePaths.size());
+			demand.allocate(candidatePaths.get(pick));
+			return true;
+		}
+
 
 		return false;
 	}

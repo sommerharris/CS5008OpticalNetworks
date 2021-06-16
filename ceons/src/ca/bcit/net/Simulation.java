@@ -92,7 +92,7 @@ public class Simulation {
                     //calculate Q value
                     int s = getNodeId(source);
                     int d = getNodeId(destination);
-                    double oldQ = qTable.getDouble(s, d, modulation.getId(), v);
+                    double oldQ = qTable.getDouble(s, d, v, modulation.getId()); //qTable[s][d][v][m]
                     double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
                     double newQ = oldQ + LEARNING_RATE * temporalDifference;
 
@@ -247,6 +247,9 @@ public class Simulation {
         int networkNodeSize = networkNodes.size();
 
         //initialize Q table to have values -100000.
+        //qTable[from][to][v][m]
+        //e.g. from node 3 to node 10, v= 0,1,2,... 40 for 10Gb/s, 20, 30... 400 , m = QAM16,
+        //qTable[3][10][0][3]
         qTable = Nd4j.zeros(networkNodeSize, networkNodeSize, NUM_OF_VOLUMES, allowedModulations.size())
                 .add(-100000.0);
 
@@ -507,18 +510,4 @@ public class Simulation {
         this.multipleSimulations = multipleSimulations;
     }
 
-
-    public class QtableRow {
-        public NetworkNode source;
-        public NetworkNode destination;
-        public IModulation modulation;
-        public int qValue;
-
-        public QtableRow(NetworkNode source, NetworkNode destination, IModulation modulation, int qValue) {
-            this.source = source;
-            this.destination = destination;
-            this.modulation = modulation;
-            this.qValue = qValue;
-        }
-    }
 }

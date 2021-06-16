@@ -1,9 +1,13 @@
 package test;
 
+
 import org.junit.Test;
+import org.junit.Assert.*;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.indexing.NDArrayIndex;
+
+import static org.junit.Assert.assertEquals;
 
 public class Qtest {
     @Test
@@ -19,6 +23,12 @@ public class Qtest {
                 NDArrayIndex.point(2));
         INDArray indArray = array1.argMax();
         System.out.println(indArray.getInt(0));
+        int[] values = array1.toIntVector();
+
+        for (int i=0; i<5; i++) {
+            assertEquals(values[i], array1.getInt(i));
+        }
+
     }
 
 }
