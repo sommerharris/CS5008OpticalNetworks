@@ -31,6 +31,8 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 
+//this is Sommer adding a comment to test my configurations :)
+
 /**
  * Main simulation class (start point)
  */

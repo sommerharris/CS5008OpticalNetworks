@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/CS5008OpticalNetworks.iml" filepath="$PROJECT_DIR$/.idea/CS5008OpticalNetworks.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ceons/Elastic-Optical-Network-Simulation.iml" filepath="$PROJECT_DIR$/ceons/Elastic-Optical-Network-Simulation.iml" />
+    </modules>
+  </component>
+</project>
