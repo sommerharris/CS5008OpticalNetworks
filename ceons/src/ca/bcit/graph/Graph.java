@@ -174,4 +174,9 @@ public class Graph<N extends Identifiable, L extends Comparable<L>, P extends Pa
 		}
 		return maxPathsPerPair;
 	}
+
+	//for Q Learning
+	public HashArray<Relation<N, L, P>> getAllLinks(){
+		return relations;
+	}
 }

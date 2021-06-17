@@ -60,7 +60,7 @@
 			<artifactId>graphics2d</artifactId>
 			<version>0.24</version>
 		</dependency>
-	
+
 		<dependency>
 			<groupId>org.nd4j</groupId>
 			<artifactId>nd4j-native-platform</artifactId>

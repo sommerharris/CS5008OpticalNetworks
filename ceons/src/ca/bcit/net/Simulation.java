@@ -2,6 +2,7 @@ package ca.bcit.net;
 
 import ca.bcit.ApplicationResources;
 import ca.bcit.Settings;
+import ca.bcit.graph.Relation;
 import ca.bcit.io.Logger;
 import ca.bcit.io.SimulationSummary;
 import ca.bcit.io.project.Project;
@@ -16,9 +17,13 @@ import ca.bcit.net.demand.DemandAllocationResult;
 import ca.bcit.net.demand.generator.TrafficGenerator;
 import ca.bcit.net.spectrum.Spectrum;
 import ca.bcit.utils.LocaleUtils;
+import ca.bcit.utils.collections.HashArray;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import javafx.fxml.FXMLLoader;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.factory.Nd4j;
+import org.nd4j.linalg.indexing.NDArrayIndex;
 
 import java.io.*;
 import java.text.SimpleDateFormat;
@@ -29,7 +34,13 @@ import java.util.*;
  * Main simulation class (start point)
  */
 public class Simulation {
-
+	public static INDArray qTable = null;
+	public static final int NUM_OF_VOLUMES = 40;
+	public static final double DISCOUNT_FACTOR = 0.8;
+	public static final double LEARNING_RATE = 0.9;
+	public static final double EPSILON = 0.5;
+	public static Map<NetworkNode, Integer> networkNodes = null;
+	
 	public static final String RESULTS_DATA_DIR_NAME = "results data";
 	private String resultsDataFileName;
 
@@ -66,7 +77,12 @@ public class Simulation {
 		SimulationMenuController.finished = false;
 		SimulationMenuController.cancelled = false;
 		clearVolumeValues();
-		
+
+		/* Q Learning - start */
+		//initialize Q values
+		initQtable(network);
+		/* Q Learning - end */
+
 		//For development set to debug, for release set to info
 		Logger.setLoggerLevel(Logger.LoggerLevel.DEBUG);
 		generator.setErlang(erlang);
@@ -110,11 +126,14 @@ public class Simulation {
 				}
 
 				task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
-			} // loop end here
 
+
+			} // loop end here
+			System.out.println(qTable.toStringFull());
 			// force call the update again here
 		}
 		catch (NetworkException e) {
+			//TODO should exclude the first 100,000 (say) due to q learning
 			Logger.info(LocaleUtils.translate("network_exception_label") + " " + LocaleUtils.translate(e.getMessage()));
 			for (; generator.getGeneratedDemandsCount() < demandsCount;) {
 				Demand demand = generator.next();
@@ -184,6 +203,11 @@ public class Simulation {
 		SimulationMenuController.cancelled = false;
 		clearVolumeValues();
 
+		/* Q Learning - start */
+		//initialize Q values
+		initQtable(network);
+		/* Q Learning - end */
+
 		ResourceBundle resourceBundle = ResourceBundle.getBundle("ca.bcit.bundles.lang", LocaleUtils.getLocaleFromLocaleEnum(Settings.CURRENT_LOCALE));
 
 		//For development set to debug, for release set to info
@@ -229,10 +253,12 @@ public class Simulation {
 				}
 
 			} // loop end here
+			System.out.println(qTable.toStringFull());
 
 			// force call the update again here
 		}
 		catch (NetworkException e) {
+			//TODO should exclude the first 100,000 (say) due to q learning
 			Logger.info(LocaleUtils.translate("network_exception_label") + " " + LocaleUtils.translate(e.getMessage()));
 			for (; generator.getGeneratedDemandsCount() < demandsCount;) {
 				Demand demand = generator.next();
@@ -385,4 +411,98 @@ public class Simulation {
 	public void setMultipleSimulations(boolean multipleSimulations) {
 		this.multipleSimulations = multipleSimulations;
 	}
+	
+	// Q Learning - start
+	private static void initQtable(Network network) {
+		initNetworkNodeMap(network);
+
+		List<Modulation> allowedModulations = network.getAllowedModulations();
+		int networkNodeSize = networkNodes.size();
+
+		//initialize Q table to have values -100000.
+		//qTable[from][to][v][m]
+		//e.g. from node 3 to node 10, v= 0,1,2,... 40 for 10Gb/s, 20, 30... 400 , m = QAM16,
+		//qTable[3][10][0][3]
+		qTable = Nd4j.zeros(networkNodeSize, networkNodeSize, NUM_OF_VOLUMES, allowedModulations.size())
+				.add(-100000.0);
+
+
+		HashArray<Relation<NetworkNode, NetworkLink, NetworkPath>> allLinks = network.getAllLinks();
+
+		//assign initial Q values for each possible link
+		//for each link
+		for (Iterator<Relation<NetworkNode, NetworkLink, NetworkPath>> iterator = allLinks.iterator(); iterator.hasNext(); ) {
+			Relation<NetworkNode, NetworkLink, NetworkPath> relation = iterator.next();
+			NetworkNode nodeA = relation.nodeA;
+			NetworkNode nodeB = relation.nodeB;
+			int a = getNodeId(nodeA);
+			if (a < 0) {
+				continue;
+			}
+			int b = getNodeId(nodeB);
+			if (b < 0) {
+				continue;
+			}
+
+			//for each available volume, v = volumn / 10 - 1, e.g volume = 10 => v = 0, volume = 400 => v = 39
+			for (int v = 0; v < 40; v++) {
+				//for each modulation method
+				for (Modulation m : allowedModulations) {
+					//qTable[a][b][v][m] = 0, from node A to node B
+					qTable.putScalar(new int[]{a, b, v, getModulationId(m)}, 0);
+					//qTable[b][a][v][m] = 0, from node B to node A
+					qTable.putScalar(new int[]{b, a, v, getModulationId(m)}, 0);
+				}
+			}
+
+
+		}
+
+
+	}
+	
+	private static void initNetworkNodeMap(Network network) {
+		NetworkNode[] nodes = network.nodes.values().toArray(new NetworkNode[0]);
+		networkNodes = new HashMap<>();
+		for (int i = 0; i < nodes.length; i++) {
+			networkNodes.put(nodes[i], i);
+		}
+	}
+
+	public static void updateQtable(int reward, int volume, PathPart part) {
+		NetworkNode source = part.source;
+		NetworkNode destination = part.getDestination();
+		Modulation modulation = part.getModulation();
+
+		int v = getV(volume);
+		//calculate Q value
+		int s = getNodeId(source);
+		int d = getNodeId(destination);
+		double oldQ = qTable.getDouble(s, d, v, getModulationId(modulation)); //qTable[s][d][v][m]
+		double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
+		double newQ = oldQ + LEARNING_RATE * temporalDifference;
+
+		//qtable[source][destination][volume][modulation] = new value
+
+		int[] index = {s, d, v, getModulationId(modulation)};
+		qTable.putScalar(index, newQ);
+	}
+
+	public static int getV(int volume) {
+		return volume / 10 - 1;
+	}
+	public static int getModulationId(Modulation m){
+		return Arrays.binarySearch(Modulation.values(), m);
+	}
+	public static int getNodeId(NetworkNode node) {
+		return networkNodes.getOrDefault(node, -1);
+	}
+
+	public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int volume) {
+		return qTable.get(NDArrayIndex.point(getNodeId(source)),
+				NDArrayIndex.point(getNodeId(destination)),
+				NDArrayIndex.point(getV(volume)),
+				NDArrayIndex.all());
+	}
+	// Q Learning - end
 }
