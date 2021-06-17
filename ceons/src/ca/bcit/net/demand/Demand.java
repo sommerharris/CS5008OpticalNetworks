@@ -72,17 +72,21 @@ public abstract class Demand {
 		return workingPath.isDisjoint(other.workingPath);
 	}
 	
-	public boolean allocate(PartedPath path) {
-		if (path.allocate(this)) {
-			if (workingPath == null)
-				workingPath = path;
+	public boolean allocate(Network network, PartedPath path) {
+		if (workingPath == null)
+			if (path.allocate(this)) {
+				this.workingPath = path;
+				return true;
+			}
 			else
-				backupPath = path;
-
-			return true;
-		}
-
-		return false;
+				return false;
+		else
+			if (path.allocate(this)) {
+				this.backupPath = path;
+				return true;
+			}
+			else
+				return false;
 	}
 	
 	public boolean onWorkingFailure() {
@@ -91,14 +95,12 @@ public abstract class Demand {
 
 		if (backupPath == null) {
 			workingPath = null;
-			ttl = initialTTL;
+			this.ttl = initialTTL;
 			return false;
 		}
-
 		workingPath = backupPath;
 		backupPath = null;
 		workingPath.toWorking(this);
-
 		return true;
 	}
 	
@@ -109,9 +111,7 @@ public abstract class Demand {
 	}
 	
 	public void deallocate() {
-		if (workingPath != null)
-			workingPath.deallocate(this);
-
+		workingPath.deallocate(this);
 		if (backupPath != null)
 			backupPath.deallocate(this);
 	}

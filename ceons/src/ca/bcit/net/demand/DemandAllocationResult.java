@@ -20,10 +20,16 @@ public class DemandAllocationResult {
 		workingPath = null;
 		backupPath = null;
 	}
-	
-	public DemandAllocationResult(Demand demand) {
+
+	public DemandAllocationResult(PartedPath workingPath) {
 		this.type = Type.SUCCESS;
-		this.workingPath = demand.getWorkingPath();
-		this.backupPath = demand.getBackupPath();
+		this.workingPath = workingPath;
+		this.backupPath = null;
+	}
+	
+	public DemandAllocationResult(PartedPath workingPath, PartedPath backupPath) {
+		this.type = Type.SUCCESS;
+		this.workingPath = workingPath;
+		this.backupPath = backupPath;
 	}
 }

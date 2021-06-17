@@ -5,6 +5,7 @@ import ca.bcit.jfx.controllers.SimulationMenuController;
 import ca.bcit.net.Simulation;
 import ca.bcit.utils.LocaleUtils;
 import javafx.concurrent.Task;
+import java.util.ResourceBundle;
 
 public class SimulationTask extends Task<Void> {
 	
@@ -12,17 +13,15 @@ public class SimulationTask extends Task<Void> {
 	private final long seed;
 	private final int demandsCount;
 	private final int erlang;
-	private final int cores;
 	private final double alpha;
 	private final boolean replicaPreservation;
 	private final SimulationMenuController simulationMenuController;
 
-	public SimulationTask(Simulation simulation, long seed, int cores, double alpha, int erlang, int demandsCount, boolean replicaPreservation, SimulationMenuController controller) {
+	public SimulationTask(Simulation simulation, long seed, double alpha, int erlang, int demandsCount, boolean replicaPreservation, SimulationMenuController controller) {
 		this.simulation = simulation;
 		this.seed = seed;
 		this.erlang = erlang;
 		this.demandsCount = demandsCount;
-		this.cores = cores;
 		this.alpha = alpha;
 		this.replicaPreservation = replicaPreservation;
 		this.simulationMenuController = controller;

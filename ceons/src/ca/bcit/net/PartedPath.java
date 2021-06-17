@@ -1,7 +1,6 @@
 package ca.bcit.net;
 
 import ca.bcit.net.demand.Demand;
-import ca.bcit.net.modulation.IModulation;
 import ca.bcit.net.spectrum.BackupSpectrumSegment;
 import ca.bcit.net.spectrum.Spectrum;
 import ca.bcit.net.spectrum.WorkingSpectrumSegment;
@@ -32,23 +31,18 @@ public class PartedPath implements Comparable<PartedPath>, Iterable<PathPart> {
 				occupiedRegeneratorsPercentage += source.occupiedRegenerators;
 				allRegenerators += source.regeneratorsCount;
 			}
-
-			NetworkLink networkLink = network.getLink(source, destination);
-
-			for (Core core: networkLink.getCores()) {
-				Spectrum spectrum = source.getID() < destination.getID() ? core.slicesUp : core.slicesDown;
-				parts.add(new PathPart(source, destination, networkLink.getLength(), spectrum));
-			}
+			parts.add(new PathPart(source, destination, network.getLink(source, destination).getLength(), 
+					network.getLinkSlices(source, destination)));
 		}
-
-		if (allRegenerators != 0)
+		if (allRegenerators != 0){
 			occupiedRegeneratorsPercentage /= allRegenerators;
-		else
+		} else{
 			occupiedRegeneratorsPercentage = 1;
-
+		}
 		this.isUp = isUp;
 		this.path = path;
 	}
+
 
 	public ArrayList<PathPart> getParts() {
 		return parts;
@@ -80,14 +74,14 @@ public class PartedPath implements Comparable<PartedPath>, Iterable<PathPart> {
 	public void mergeIdenticalModulation(int volume) {
 		for (int i = 1; i < parts.size(); i++)
 			if (parts.get(i - 1).getModulation() == parts.get(i).getModulation() && parts.get(i - 1).getLength() +
-					parts.get(i).getLength() <= parts.get(i).getModulation().getMaximumDistanceSupportedByBitrateWithJumpsOfTenGbps()[volume]) {
+					parts.get(i).getLength() <= parts.get(i).getModulation().modulationDistances[volume]) {
 				parts.get(i - 1).merge(parts.get(i));
 				parts.remove(i);
 				i--;
 			}
 	}
 	
-	public IModulation getModulationFromLongestPart() {
+	public Modulation getModulationFromLongestPart() {
 		PathPart longestPart = parts.get(0), part;
 		for (int i = 1; i < parts.size(); i++) {
 			part = parts.get(i);
@@ -109,30 +103,28 @@ public class PartedPath implements Comparable<PartedPath>, Iterable<PathPart> {
 	}
 	
 	public boolean allocate(Demand demand) {
-		for (PathPart part : parts)
-			if (part != parts.get(0))
+		for (PathPart part : parts) {
+			if (part != parts.get(0)){
 				part.source.occupyRegenerators(1, false);
-
+			}
+			
+		}
+		
 		for (PathPart part : parts) {
 			Spectrum slices = part.getSlices();
 			int slicesCount, offset;
 			if (demand.getWorkingPath() == null) {
-				slicesCount = part.getModulation().getSlicesConsumptionByBitrateWithJumpsOfTenGbps()[(int) Math.ceil(demand.getVolume() / 10.0) - 1];
+				slicesCount = part.getModulation().slicesConsumption[(int) Math.ceil(demand.getVolume() / 10) - 1];
 				offset = slices.canAllocateWorking(slicesCount);
-				if (offset == -1)
-					return false;
+				if (offset == -1) return false;
 				part.segment = new WorkingSpectrumSegment(offset, slicesCount, demand);
-			}
-			else {
-				slicesCount = part.getModulation().getSlicesConsumptionByBitrateWithJumpsOfTenGbps()[(int) Math.ceil(demand.getSqueezedVolume() / 10.0) - 1];
+			} else {
+				slicesCount = part.getModulation().slicesConsumption[(int) Math.ceil(demand.getSqueezedVolume() / 10) - 1];
 				offset = slices.canAllocateBackup(demand, slicesCount);
-				if (offset == -1)
-					return false;
+				if (offset == -1) return false;
 				part.segment = new BackupSpectrumSegment(offset, slicesCount, demand);
 			}
-
-			for	(Spectrum slice : part.spectra)
-				slice.allocate(part.segment);
+			for	(Spectrum slice : part.spectra) slice.allocate(part.segment);
 		}
 
 		return true;
@@ -182,6 +174,7 @@ public class PartedPath implements Comparable<PartedPath>, Iterable<PathPart> {
 	}
 	
 	private static class PartedPathLengthComparator implements Comparator<PartedPath> {
+
 		@Override
 		public int compare(PartedPath path1, PartedPath path2) {
 			return path1.path.compareTo(path2.path);

@@ -50,10 +50,19 @@ public class Simulation {
 	public Simulation(Network network, TrafficGenerator generator) {
 		this.network = network;
 		this.generator = generator;
-		network.setTrafficGenerator(generator);
 	}
 
-	public void simulate(long seed, int demandsCount, double alpha, int erlang, boolean replicaPreservation, SimulationTask task) throws IllegalAccessException, ClassNotFoundException, InstantiationException {
+	public Simulation(Network network, TrafficGenerator generator, boolean printSummary) {
+		this.network = network;
+		this.generator = generator;
+	}
+
+	public Simulation(Network network, TrafficGenerator generator, boolean printSummary, int totalSimulations, int startingErlangValue, int currentErlangValue, int endingErlangValue, int randomSeed, double alpha) {
+		this.network = network;
+		this.generator = generator;
+	}
+
+	public void simulate(long seed, int demandsCount, double alpha, int erlang, boolean replicaPreservation, SimulationTask task) {
 		SimulationMenuController.finished = false;
 		SimulationMenuController.cancelled = false;
 		clearVolumeValues();
@@ -170,7 +179,7 @@ public class Simulation {
 		}
 	}
 
-	public void simulate(long seed, int demandsCount, double alpha, int erlang, boolean replicaPreservation) throws IllegalAccessException, ClassNotFoundException, InstantiationException {
+	public void simulate(long seed, int demandsCount, double alpha, int erlang, boolean replicaPreservation) {
 		SimulationMenuController.finished = false;
 		SimulationMenuController.cancelled = false;
 		clearVolumeValues();
@@ -318,16 +327,16 @@ public class Simulation {
 		mainWindowController.spectrumBlockedVolume = 0;
 		mainWindowController.regeneratorsBlockedVolume = 0;
 		mainWindowController.linkFailureBlockedVolume = 0;
-		for (NetworkNode n : network.getNodes()) {
+		for(NetworkNode n : network.getNodes()){
 			n.clearOccupied();
-			for (NetworkNode n2 : network.getNodes())
-				if (network.containsLink(n, n2)) {
+			for(NetworkNode n2 : network.getNodes()){
+				if(network.containsLink(n, n2)){
 					NetworkLink networkLink = network.getLink(n, n2);
-					for (Core core: networkLink.getCores()) {
-						core.slicesUp = new Spectrum(Core.NUMBER_OF_SLICES);
-						core.slicesDown = new Spectrum(Core.NUMBER_OF_SLICES);
-					}
+					Spectrum spectrum = network.getLinkSlices(n, n2);
+					networkLink.slicesUp = new Spectrum(NetworkLink.NUMBER_OF_SLICES);
+					networkLink.slicesDown = new Spectrum(NetworkLink.NUMBER_OF_SLICES);
 				}
+			}
 		}
 	}
 
@@ -336,40 +345,35 @@ public class Simulation {
 	 * If the demand can be fulfilled, resources will be consumed.
 	 * @param demand the demand in question
 	 */
-	private void handleDemand(Demand demand) throws IllegalAccessException, InstantiationException, ClassNotFoundException {
+	private void handleDemand(Demand demand) {
 		DemandAllocationResult result = network.allocateDemand(demand);
 
 		if (result.workingPath == null)
 			switch (result.type) {
-				case NO_REGENERATORS:
-					regeneratorsBlockedVolume += demand.getVolume();
-					ResizableCanvas.getParentController().regeneratorsBlockedVolume += demand.getVolume();
-					break;
-				case NO_SPECTRUM:
-					spectrumBlockedVolume += demand.getVolume();
-					ResizableCanvas.getParentController().spectrumBlockedVolume += demand.getVolume();
-					break;
-				default:
-					break;
+			case NO_REGENERATORS:
+				regeneratorsBlockedVolume += demand.getVolume();
+				ResizableCanvas.getParentController().regeneratorsBlockedVolume += demand.getVolume();
+				break;
+			case NO_SPECTRUM:
+				spectrumBlockedVolume += demand.getVolume();
+				ResizableCanvas.getParentController().spectrumBlockedVolume += demand.getVolume();
+				break;
+			default:
+				break;
 			}
 		else {
 			allocations++;
 			regsPerAllocation += demand.getWorkingPath().getPartsCount() - 1;
-
 			if (demand.getBackupPath() != null)
 				regsPerAllocation += demand.getBackupPath().getPartsCount() - 1;
-
 			double modulationsUsage[] = new double[6];
-
 			for (PathPart part : result.workingPath)
-				modulationsUsage[part.getModulation().getId()]++;
-
+				modulationsUsage[part.getModulation().ordinal()]++;
 			for (int i = 0; i < 6; i++) {
 				modulationsUsage[i] /= result.workingPath.getPartsCount();
 				this.modulationsUsage[i] += modulationsUsage[i];
 			}
 		}
-
 		totalVolume += demand.getVolume();
 		ResizableCanvas.getParentController().totalVolume += demand.getVolume();
 	}

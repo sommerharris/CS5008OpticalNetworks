@@ -19,10 +19,9 @@ public abstract class AnycastDemand extends Demand {
 		public ArrayList<PartedPath> getCandidatePaths(boolean backup, Network network) {
 			ArrayList<PartedPath> paths = new ArrayList<>();
 
-			if (backup && workingPath != null)
+			if (backup)
 				if (replicaPreservation) {
-					NetworkPath networkPath = workingPath.getPath();
-					NetworkNode replica = networkPath.get(0) == client ? networkPath.get(networkPath.size() - 1) : networkPath.get(0);
+					NetworkNode replica = workingPath.getPath().get(0) == client ? workingPath.getPath().get(workingPath.getPath().size() - 1) : workingPath.getPath().get(0);
 					int acceptedPaths = 0;
 					for (NetworkPath path : network.getPaths(client, replica))
 						if (!network.isInactive(path))
@@ -79,9 +78,8 @@ public abstract class AnycastDemand extends Demand {
 			ArrayList<PartedPath> paths = new ArrayList<>();
 
 			if (backup)
-				if (replicaPreservation && workingPath != null) {
-					NetworkPath networkPath = workingPath.getPath();
-					NetworkNode replica = networkPath.get(0) == client ? networkPath.get(networkPath.size() - 1) : networkPath.get(0);
+				if (replicaPreservation) {
+					NetworkNode replica = workingPath.getPath().get(0) == client ? workingPath.getPath().get(workingPath.getPath().size() - 1) : workingPath.getPath().get(0);
 					int acceptedPaths = 0;
 					for (NetworkPath path : network.getPaths(client, replica))
 						if (!network.isInactive(path))
