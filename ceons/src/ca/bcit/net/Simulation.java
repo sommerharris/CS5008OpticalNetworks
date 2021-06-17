@@ -30,6 +30,8 @@ import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+import static ca.bcit.net.demand.DemandAllocationResult.Type.SUCCESS;
+
 
 /**
  * Main simulation class (start point)
@@ -38,7 +40,7 @@ public class Simulation {
     public static final int NUM_OF_VOLUMES = 40;
     public static INDArray qTable = null;
     public static Map<NetworkNode, Integer> networkNodes = null;
-    public static final double DISCOUNT_FACTOR = 0.9;
+    public static final double DISCOUNT_FACTOR = 0.8;
     public static final double LEARNING_RATE = 0.9;
     public static final double EPSILON = 0.5;
 
@@ -66,44 +68,49 @@ public class Simulation {
         network.setTrafficGenerator(generator);
     }
 
-    public void updateQtable(Demand demand) {
+//    public void updateQtable(Demand demand, DemandAllocationResult result) {
+//
+//        PartedPath workingPath = demand
+//                .getWorkingPath();
+//        // calculate rewards
+//        int reward = reward(result);
+//
+//
+//        int volume = demand.getVolume();
+//        int v = getV(volume);
+//
+//        if (workingPath == null) {
+//
+//            return;
+//        }
+//        workingPath
+//                .getParts()
+//                .forEach(part -> {
+//                    updateQtable(reward, v, part);
+//                });
+//
+//
+//    }
 
-        PartedPath workingPath = demand
-                .getWorkingPath();
-        if (workingPath == null) {
-            return;
-        }
-        int reward = -workingPath
-                .getParts()
-                .stream()
-                .mapToInt(part -> part.metric)
-                .sum();
+    public static void updateQtable(int reward, int volume, PathPart part) {
+        NetworkNode source = part.source;
+        NetworkNode destination = part.getDestination();
+        IModulation modulation = part.getModulation();
 
-        int volume = demand.getVolume();
         int v = getV(volume);
+        //calculate Q value
+        int s = getNodeId(source);
+        int d = getNodeId(destination);
+        double oldQ = qTable.getDouble(s, d, v, modulation.getId()); //qTable[s][d][v][m]
+        double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
+        double newQ = oldQ + LEARNING_RATE * temporalDifference;
 
-        workingPath
-                .getParts()
-                .forEach(part -> {
-                    NetworkNode source = part.source;
-                    NetworkNode destination = part.getDestination();
-                    IModulation modulation = part.getModulation();
+        //qtable[source][destination][volume][modulation] = new value
 
-                    //calculate Q value
-                    int s = getNodeId(source);
-                    int d = getNodeId(destination);
-                    double oldQ = qTable.getDouble(s, d, v, modulation.getId()); //qTable[s][d][v][m]
-                    double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
-                    double newQ = oldQ + LEARNING_RATE * temporalDifference;
-
-                    //qtable[source][destination][volume][modulation] = new value
-
-                    int[] index = {s, d, v, modulation.getId()};
-                    qTable.putScalar(index, newQ);
-                });
-
-
+        int[] index = {s, d, v, modulation.getId()};
+        qTable.putScalar(index, newQ);
     }
+
 
 
     public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int volume) {
@@ -162,7 +169,6 @@ public class Simulation {
                 }
 
                 network.update();
-                updateQtable(demand);
 
                 // pause button
                 pause();
@@ -178,6 +184,7 @@ public class Simulation {
 
             // force call the update again here
         } catch (NetworkException e) {
+            //TODO should exclude the first 100,000 (say) due to q learning
             Logger.info(LocaleUtils.translate("network_exception_label") + " " + LocaleUtils.translate(e.getMessage()));
             for (; generator.getGeneratedDemandsCount() < demandsCount; ) {
                 Demand demand = generator.next();
@@ -338,7 +345,6 @@ public class Simulation {
                 }
 
                 network.update();
-                updateQtable(demand);
 
                 // pause button
                 pause();
@@ -500,6 +506,7 @@ public class Simulation {
 
         totalVolume += demand.getVolume();
         ResizableCanvas.getParentController().totalVolume += demand.getVolume();
+
     }
 
     public boolean isMultipleSimulations() {

@@ -10,6 +10,8 @@ import org.nd4j.linalg.api.ndarray.INDArray;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static ca.bcit.net.Simulation.*;
 
@@ -50,6 +52,9 @@ public class AMRA extends BaseRMSAAlgorithm implements IRMSAAlgorithm {
                 allocateBackupPath(demand, candidatePaths);
             }
 
+            if (demand.getWorkingPath()==null && demand.getBackupPath()==null){
+                return DemandAllocationResult.NO_SPECTRUM;
+            }
             return new DemandAllocationResult(demand);
         } catch (NoSpectrumAvailableException e) {
             return DemandAllocationResult.NO_SPECTRUM;
@@ -58,8 +63,17 @@ public class AMRA extends BaseRMSAAlgorithm implements IRMSAAlgorithm {
         }
     }
 
+    class Tuple<X,Y>{
+        X x;
+        Y y;
 
-    private Optional<IModulation> getModulationFromQtable(NetworkNode source, NetworkNode destination, int volume, List<IModulation> modulations, PathPart part) {
+        public Tuple(X x, Y y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private Optional<Tuple<IModulation,Integer>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int volume, List<IModulation> modulations, PathPart part) {
         double random = Math.random();
 
         if (random < EPSILON) {
@@ -68,11 +82,17 @@ public class AMRA extends BaseRMSAAlgorithm implements IRMSAAlgorithm {
             //get the modulation with greatest Q value while fitting the volume (bit rate)
             return modulations.stream()
                     .filter(m -> m.getMaximumDistanceSupportedByBitrateWithJumpsOfTenGbps()[volume] > part.getLength())
-                    .max(Comparator.comparingInt(m -> qvalues.getInt(m.getId())));
+                    .max(Comparator.comparingInt(m -> qvalues.getInt(m.getId())))
+                    .map(m->new Tuple<>(m,
+                           - (int)Math.round(qTable.getDouble(getNodeId(source), getNodeId(destination), volume, m.getId()))));
         } else {
             //explore by random pick
-            int pick = (int) Math.floor(Math.random() * modulations.size());
-            return Optional.of(modulations.get(pick));
+            List<IModulation> allowedModulations = modulations.stream()
+                    .filter(m -> m.getMaximumDistanceSupportedByBitrateWithJumpsOfTenGbps()[volume] > part.getLength())
+                    .collect(Collectors.toList());
+            int pick = (int) Math.floor(Math.random() * allowedModulations.size());
+
+            return Optional.of(new Tuple<>(modulations.get(pick), -qTable.maxNumber().intValue()));
         }
 
     }
@@ -82,35 +102,32 @@ public class AMRA extends BaseRMSAAlgorithm implements IRMSAAlgorithm {
         for (PartedPath path : candidatePaths) {
             path.mergeRegeneratorlessParts();
 
-            long distance = 0;
-            long sliceOccupied = 0;
-
             // choosing modulations for parts
             for (PathPart part : path) {
                 NetworkNode source = part.getSource();
                 NetworkNode destination = part.getDestination();
 
                 //select modulation from Q table
-                Optional<IModulation> modulationOpt = getModulationFromQtable(source, destination, volume, network.getAllowedModulations(), part);
+                Optional<Tuple<IModulation, Integer>> modulationOpt = getModulationFromQtable(source, destination, volume, network.getAllowedModulations(), part);
                 if (!modulationOpt.isPresent()){
                     //unable to find a modulation
+                    path.setMetric(Integer.MAX_VALUE);
                     continue pathLoop;
                 }
-                IModulation modulation = modulationOpt.get();
-                double qValue = qTable.getDouble(getNodeId(source), getNodeId(destination), volume, modulation.getId());
-                part.setModulation(modulation, (int) Math.round(qValue)); //put Q value as metric
+                IModulation modulation = modulationOpt.get().x;
+               // double qValue = qTable.getDouble(getNodeId(source), getNodeId(destination), volume, modulation.getId());
+                part.setModulation(modulation, modulationOpt.get().y); //put Q value as metric
 
-                //TODO get distance, slices, used up spectrum?, used up regenerators?
-//                distance += part.getLength();
-//                sliceOccupied += part.getSlices().getOccupiedSlices();
 
                 //Original AMRA
 //				for (IModulation modulation : network.getAllowedModulations())
 //					if (modulation.getMaximumDistanceSupportedByBitrateWithJumpsOfTenGbps()[volume] >= part.getLength())
 //						part.setModulationIfBetter(modulation, calculateModulationMetric(network, part, modulation));
 
-                if (part.getModulation() == null)
+                if (part.getModulation() == null) {
+                    path.setMetric(Integer.MAX_VALUE);
                     continue pathLoop;
+                }
             }
             path.calculateMetricFromParts();
             path.mergeIdenticalModulation(volume);
@@ -124,8 +141,6 @@ public class AMRA extends BaseRMSAAlgorithm implements IRMSAAlgorithm {
             }
 
             // Update metrics
-            // TODO calculate reward for each part and sum all rewards for a candidate path
-
             int increment = network.getRegeneratorMetricValue() * path.getNeededRegeneratorsCount();
             path.setMetric(path.getMetric() + increment);
         }
