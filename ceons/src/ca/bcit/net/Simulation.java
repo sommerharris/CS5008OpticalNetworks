@@ -495,7 +495,7 @@ public class Simulation {
         }
     }
 
-    public static void updateQtable(int reward, int v, PathPart part) {
+    public static void updateQtable(double reward, int v, PathPart part) {
         NetworkNode source = part.source;
         NetworkNode destination = part.getDestination();
         Modulation modulation = part.getModulation();

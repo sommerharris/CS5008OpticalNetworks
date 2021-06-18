@@ -125,18 +125,13 @@ public class QL implements IRMSAAlgorithm{
 				path.calculateMetricFromParts();
 			}
 
-			// Update metrics
-//			path.setMetric(
-//					network.getRegeneratorMetricValue()
-//							* (path.getNeededRegeneratorsCount())
-//							+ path.getMetric());
 		}
 		Collections.sort(candidatePaths);
-//		for (int i = 0; i < candidatePaths.size(); i++)
-//			if (candidatePaths.get(i).getMetric() < 0) {
-//				candidatePaths.remove(i);
-//				i--;
-//			}
+		for (int i = 0; i < candidatePaths.size(); i++)
+			if (candidatePaths.get(i).getMetric() == Integer.MAX_VALUE){
+				candidatePaths.remove(i);
+				i--;
+			}
 
 		return candidatePaths;
 	}
@@ -192,23 +187,22 @@ public class QL implements IRMSAAlgorithm{
 	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
 
 		//calculate reward
-		int reward = allocateResult ? (int)Math.round( -100 * path.getParts().parallelStream()
+		double reward = allocateResult ?  -100 * path.getParts().parallelStream()
 				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
 				.max()
-				.orElse(1) ): -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+				.orElse(1) : -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
 
 		path.getParts().parallelStream()
 				.forEach(part->{
-					//below reward has not yet tested.
-					int r = reward;
+					//update reward base on the part length as a % of max modulation distance.
+					double r = reward;
 					if (allocateResult) {
 						double u = 1.0 - ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-						 r = (int) Math.round(reward * u);
+						 r = reward * u;
 					}
 					//Update Q table
 					Simulation.updateQtable(r, v, part);
 
-//					Simulation.updateQtable(reward, v, part);
 				});
 
 	}
