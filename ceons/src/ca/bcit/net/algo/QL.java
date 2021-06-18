@@ -200,12 +200,15 @@ public class QL implements IRMSAAlgorithm{
 		path.getParts().parallelStream()
 				.forEach(part->{
 					//below reward has not yet tested.
-//					double u = 1.0 - ((double)part.getLength()) / part.getModulation().modulationDistances[v];
-//					int r = (int) Math.round(reward * u);
+					int r = reward;
+					if (allocateResult) {
+						double u = 1.0 - ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+						 r = (int) Math.round(reward * u);
+					}
 					//Update Q table
-//					Simulation.updateQtable(r, v, part);
+					Simulation.updateQtable(r, v, part);
 
-					Simulation.updateQtable(reward, v, part);
+//					Simulation.updateQtable(reward, v, part);
 				});
 
 	}
