@@ -129,7 +129,12 @@ public class Simulation {
 
 
 			} // loop end here
-			System.out.println(qTable.toStringFull());
+			try(FileWriter w = new FileWriter("qtable-end.txt")){
+				w.write(qTable.toStringFull());
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
 			// force call the update again here
 		}
 		catch (NetworkException e) {
@@ -458,6 +463,11 @@ public class Simulation {
 
 		}
 
+		try(FileWriter w = new FileWriter("qtable-start.txt")){
+			w.write(qTable.toStringFull());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 
 	}
 	
@@ -469,12 +479,11 @@ public class Simulation {
 		}
 	}
 
-	public static void updateQtable(int reward, int volume, PathPart part) {
+	public static void updateQtable(int reward, int v, PathPart part) {
 		NetworkNode source = part.source;
 		NetworkNode destination = part.getDestination();
 		Modulation modulation = part.getModulation();
 
-		int v = getV(volume);
 		//calculate Q value
 		int s = getNodeId(source);
 		int d = getNodeId(destination);
@@ -488,9 +497,6 @@ public class Simulation {
 		qTable.putScalar(index, newQ);
 	}
 
-	public static int getV(int volume) {
-		return volume / 10 - 1;
-	}
 	public static int getModulationId(Modulation m){
 		return Arrays.binarySearch(Modulation.values(), m);
 	}
@@ -498,10 +504,10 @@ public class Simulation {
 		return networkNodes.getOrDefault(node, -1);
 	}
 
-	public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int volume) {
+	public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int v) {
 		return qTable.get(NDArrayIndex.point(getNodeId(source)),
 				NDArrayIndex.point(getNodeId(destination)),
-				NDArrayIndex.point(getV(volume)),
+				NDArrayIndex.point(v),
 				NDArrayIndex.all());
 	}
 	// Q Learning - end

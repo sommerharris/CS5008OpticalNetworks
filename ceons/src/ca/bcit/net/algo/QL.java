@@ -46,7 +46,7 @@ public class QL implements IRMSAAlgorithm{
 				if (demand.allocate(network, path)) {
 					workingPathSuccess = true;
 					//update Q table as the demand is allocated successfully
-					updateQtable(demand, path, true);
+					updateQtable(volume, path, true);
 					break;
 				}
 
@@ -58,7 +58,7 @@ public class QL implements IRMSAAlgorithm{
 		if (!workingPathSuccess) {
 			//update Q table as none of candidate paths is allocated successfully
 			for (PartedPath path : candidatePaths) {
-				updateQtable(demand, path, false);
+				updateQtable(volume, path, false);
 			}
 			return DemandAllocationResult.NO_SPECTRUM;
 		}
@@ -86,7 +86,7 @@ public class QL implements IRMSAAlgorithm{
 		return new DemandAllocationResult(demand.getWorkingPath());
 	}
 
-	private static List<PartedPath> applyMetrics(Network network, int volume, List<PartedPath> candidatePaths) {
+	private static List<PartedPath> applyMetrics(Network network, int v, List<PartedPath> candidatePaths) {
 		pathLoop: for (PartedPath path : candidatePaths) {
 			path.mergeRegeneratorlessParts();
 
@@ -95,7 +95,7 @@ public class QL implements IRMSAAlgorithm{
 				NetworkNode source = part.getSource();
 				NetworkNode destination = part.getDestination();
 
-				Optional<Tuple<Modulation, Integer>> modulationOpt = getModulationFromQtable(source, destination, volume, network.getAllowedModulations(), part);
+				Optional<Tuple<Modulation, Integer>> modulationOpt = getModulationFromQtable(source, destination, v, network.getAllowedModulations(), part);
 				if (!modulationOpt.isPresent()){
 					//unable to find a modulation
 					path.setMetric(Integer.MAX_VALUE);
@@ -115,7 +115,7 @@ public class QL implements IRMSAAlgorithm{
 
 			}
 			path.calculateMetricFromParts();
-			path.mergeIdenticalModulation(volume);
+			path.mergeIdenticalModulation(v);
 
 			// Unify modulations if needed
 			if (!network.canSwitchModulation()) {
@@ -165,22 +165,22 @@ public class QL implements IRMSAAlgorithm{
 		return network.getDynamicModulationMetric(modulation, slicesOccupationMetric);
 	}
 
-	private static Optional<Tuple<Modulation,Integer>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int volume, List<Modulation> modulations, PathPart part) {
+	private static Optional<Tuple<Modulation,Integer>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int v, List<Modulation> modulations, PathPart part) {
 		double random = Math.random();
 
 		if (random < EPSILON) {
 			// exploit
-			INDArray qvalues = getQvalues(source, destination, volume);
+			INDArray qvalues = getQvalues(source, destination, v);
 			//get the modulation with greatest Q value while fitting the volume (bit rate)
 			return modulations.stream()
-					.filter(m -> m.modulationDistances[volume] > part.getLength())
+					.filter(m -> m.modulationDistances[v] > part.getLength())
 					.max(Comparator.comparingInt(m -> qvalues.getInt(getModulationId(m))))
 					.map(m->new Tuple<>(m,
-							- (int)Math.round(qTable.getDouble(getNodeId(source), getNodeId(destination), volume, getModulationId(m)))));
+							- (int)Math.round(qTable.getDouble(getNodeId(source), getNodeId(destination), v, getModulationId(m)))));
 		} else {
 			//explore by random pick
 			List<Modulation> allowedModulations = modulations.stream()
-					.filter(m -> m.modulationDistances[volume] > part.getLength())
+					.filter(m -> m.modulationDistances[v] > part.getLength())
 					.collect(Collectors.toList());
 			int pick = (int) Math.floor(Math.random() * allowedModulations.size());
 
@@ -189,17 +189,25 @@ public class QL implements IRMSAAlgorithm{
 
 	}
 
-	private void updateQtable(Demand demand, PartedPath path, boolean allocateResult) {
-		//calculate reward
-		int reward = allocateResult ? 100 : -1000;
+	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
 
-		//Update Q table
-		for (PathPart part : path.getParts()) {
-			part.getSlices();
-			double occupiedSlicesPercentage = part.getOccupiedSlicesPercentage();
-			reward *= (0.5-occupiedSlicesPercentage);
-			Simulation.updateQtable(reward, demand.getVolume(), part);
-		}
+		//calculate reward
+		int reward = allocateResult ? (int)Math.round( -100 * path.getParts().parallelStream()
+				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
+				.max()
+				.orElse(1) ): -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+
+		path.getParts().parallelStream()
+				.forEach(part->{
+					//below reward has not yet tested.
+//					double u = 1.0 - ((double)part.getLength()) / part.getModulation().modulationDistances[v];
+//					int r = (int) Math.round(reward * u);
+					//Update Q table
+//					Simulation.updateQtable(r, v, part);
+
+					Simulation.updateQtable(reward, v, part);
+				});
+
 	}
 
 
