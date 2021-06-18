@@ -82,4 +82,12 @@ public class PathPart {
 	public Modulation getModulation() {
 		return modulation;
 	}
+
+	public void setSegment(AllocatableSpectrumSegment segment) {
+		this.segment = segment;
+	}
+
+	public AllocatableSpectrumSegment getSegment() {
+		return segment;
+	}
 }

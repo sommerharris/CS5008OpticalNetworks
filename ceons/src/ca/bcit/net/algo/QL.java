@@ -3,12 +3,12 @@ package ca.bcit.net.algo;
 import ca.bcit.net.*;
 import ca.bcit.net.demand.Demand;
 import ca.bcit.net.demand.DemandAllocationResult;
+import ca.bcit.net.spectrum.BackupSpectrumSegment;
+import ca.bcit.net.spectrum.Spectrum;
+import ca.bcit.net.spectrum.WorkingSpectrumSegment;
 import org.nd4j.linalg.api.ndarray.INDArray;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static ca.bcit.net.Simulation.*;
@@ -42,13 +42,63 @@ public class QL implements IRMSAAlgorithm{
 		boolean workingPathSuccess = false;
 
 		try {
-			for (PartedPath path : candidatePaths)
-				if (demand.allocate(network, path)) {
-					workingPathSuccess = true;
-					//update Q table as the demand is allocated successfully
-					updateQtable(volume, path, true);
-					break;
+		    allCandidatePaths:
+			for (PartedPath path : candidatePaths) {
+                //copy from PartedPath.allocate(Demand demand)
+                ArrayList<PathPart> parts = path.getParts();
+                for (PathPart part : parts) {
+                    if (part != parts.get(0)){
+                        part.getSource().occupyRegenerators(1, false);
+                    }
+                }
+                for (PathPart part : parts) {
+                    Spectrum slices = part.getSlices();
+                    int slicesCount, offset;
+                    if (demand.getWorkingPath() == null) {
+                        slicesCount = part.getModulation().slicesConsumption[(int) Math.ceil(demand.getVolume() / 10) - 1];
+                        offset = slices.canAllocateWorking(slicesCount);
+                        if (offset == -1) {
+                            // allocation failed
+                            updateQvalueWhenAllocationFailed(volume, part);
+
+                            // next candidate path
+                            continue  allCandidatePaths;
+                        }
+                        part.setSegment( new WorkingSpectrumSegment(offset, slicesCount, demand));
+                    } else {
+                        slicesCount = part.getModulation().slicesConsumption[(int) Math.ceil(demand.getSqueezedVolume() / 10) - 1];
+                        offset = slices.canAllocateBackup(demand, slicesCount);
+                        if (offset == -1) {
+                            //allocation failed
+                            updateQvalueWhenAllocationFailed(volume, part);
+
+                            // next candidate path
+                            continue  allCandidatePaths;
+                        }
+                        part.setSegment( new BackupSpectrumSegment(offset, slicesCount, demand));
+                    }
+                    for	(Spectrum slice : part.spectra) slice.allocate(part.getSegment());
+                }
+
+                //allocation successful
+                workingPathSuccess = true;
+                //update Q table as the demand is allocated successfully
+                updateQtable(volume, path, true);
+
+                if (demand.getWorkingPath()==null){
+                	demand.setWorkingPath(path);
+				} else {
+                	demand.setBackupPath(path);
 				}
+                break;
+
+//                if (demand.allocate(network, path)) {
+//                    workingPathSuccess = true;
+//                    //update Q table as the demand is allocated successfully
+//                    updateQtable(volume, path, true);
+//                    break;
+//                }
+            }
 
 		}
 		catch (NetworkException storage) {
@@ -56,10 +106,10 @@ public class QL implements IRMSAAlgorithm{
 			return DemandAllocationResult.NO_REGENERATORS;
 		}
 		if (!workingPathSuccess) {
-			//update Q table as none of candidate paths is allocated successfully
-			for (PartedPath path : candidatePaths) {
-				updateQtable(volume, path, false);
-			}
+//			//update Q table as none of candidate paths is allocated successfully
+//			for (PartedPath path : candidatePaths) {
+//				updateQtable(volume, path, false);
+//			}
 			return DemandAllocationResult.NO_SPECTRUM;
 		}
 		try {
@@ -190,25 +240,30 @@ public class QL implements IRMSAAlgorithm{
 		double reward = allocateResult ?  -100 * path.getParts().parallelStream()
 				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
 				.max()
-				.orElse(1) : -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+				.orElse(1) : -3000;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
 
 		path.getParts().parallelStream()
-				.forEach(part->{
-					//update reward base on the part length as a % of max modulation distance.
-					double r = reward;
-					if (allocateResult) {
-						double u = 1.0 - ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-						 r = reward * u;
-					}
-					//Update Q table
-					Simulation.updateQtable(r, v, part);
-
-				});
+				.forEach(part-> updateQvalue(v, allocateResult, reward, part));
 
 	}
 
+	private void updateQvalueWhenAllocationFailed(int v, PathPart part){
+	    updateQvalue(v, false, -3000, part);
+    }
+    private void updateQvalue(int v, boolean allocateResult, double reward, PathPart part) {
+        double r = reward;
+        if (allocateResult) {
+            //update reward base on the part length as a % of max modulation distance.
+            double u = 1.0 - ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+             r = reward * u;
+        }
 
-	static class Tuple<X,Y>{
+        //Update Q table
+        Simulation.updateQtable(r, v, part);
+    }
+
+
+    static class Tuple<X,Y>{
 		X x;
 		Y y;
 

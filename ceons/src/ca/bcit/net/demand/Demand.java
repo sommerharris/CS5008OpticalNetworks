@@ -115,4 +115,12 @@ public abstract class Demand {
 		if (backupPath != null)
 			backupPath.deallocate(this);
 	}
+
+	public void setWorkingPath(PartedPath workingPath) {
+		this.workingPath = workingPath;
+	}
+
+	public void setBackupPath(PartedPath backupPath) {
+		this.backupPath = backupPath;
+	}
 }
