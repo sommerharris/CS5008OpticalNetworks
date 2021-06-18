@@ -187,17 +187,17 @@ public class QL implements IRMSAAlgorithm{
 	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
 
 		//calculate reward
-		double reward = allocateResult ?  -100 * path.getParts().parallelStream()
+		double reward = allocateResult ?  100 * path.getParts().parallelStream()
 				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
 				.max()
-				.orElse(1) : -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+				.orElse(0) : -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
 
 		path.getParts().parallelStream()
 				.forEach(part->{
 					//update reward base on the part length as a % of max modulation distance.
 					double r = reward;
 					if (allocateResult) {
-						double u = 1.0 - ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+						double u =  ((double) part.getLength()) / part.getModulation().modulationDistances[v];
 						 r = reward * u;
 					}
 					//Update Q table
