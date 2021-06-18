@@ -41,6 +41,7 @@ public class Simulation {
     public static final double LEARNING_RATE = 0.9;
     public static final double EPSILON = 0.5;
     public static Map<NetworkNode, Integer> networkNodes = null;
+    public static int learningCount = 0;
 
     public static final String RESULTS_DATA_DIR_NAME = "results data";
     private String resultsDataFileName;
@@ -83,6 +84,7 @@ public class Simulation {
         /* Q Learning - start */
         //initialize Q values
         initQtable(network);
+        learningCount = 0;
         /* Q Learning - end */
         int i = 0;
 
@@ -129,7 +131,7 @@ public class Simulation {
                 }
 
                 task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
-
+                learningCount++;
 
             } // loop end here
             try (FileWriter w = new FileWriter("qtable-end.txt")) {
@@ -220,8 +222,10 @@ public class Simulation {
         /* Q Learning - start */
         //initialize Q values
         initQtable(network);
+        learningCount = 0;
         /* Q Learning - end */
         int i = 0;
+
 
         ResourceBundle resourceBundle = ResourceBundle.getBundle("ca.bcit.bundles.lang", LocaleUtils.getLocaleFromLocaleEnum(Settings.CURRENT_LOCALE));
 
@@ -266,7 +270,7 @@ public class Simulation {
                     Logger.info(LocaleUtils.translate("simulation_cancelled"));
                     break;
                 }
-
+                learningCount++;
             } // loop end here
             System.out.println(qTable.toStringFull());
 

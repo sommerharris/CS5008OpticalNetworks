@@ -185,7 +185,9 @@ public class QL implements IRMSAAlgorithm{
 	}
 
 	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
-
+		if (learningCount > 10000){
+			return;
+		}
 		//calculate reward
 		double reward = allocateResult ?  100 * path.getParts().parallelStream()
 				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
