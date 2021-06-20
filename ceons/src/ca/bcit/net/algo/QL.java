@@ -1,19 +1,20 @@
 package ca.bcit.net.algo;
 
+import ca.bcit.Tuple;
 import ca.bcit.net.*;
 import ca.bcit.net.demand.Demand;
 import ca.bcit.net.demand.DemandAllocationResult;
 import org.nd4j.linalg.api.ndarray.INDArray;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static ca.bcit.net.Simulation.*;
 
 public class QL implements IRMSAAlgorithm{
+
+	public static final int NEG_REWARD = -3500;
+
 	public String getKey(){
 		return "QL";
 	};
@@ -95,13 +96,13 @@ public class QL implements IRMSAAlgorithm{
 				NetworkNode source = part.getSource();
 				NetworkNode destination = part.getDestination();
 
-				Optional<Tuple<Modulation, Integer>> modulationOpt = getModulationFromQtable(source, destination, v, network.getAllowedModulations(), part);
+				Optional<Tuple<Modulation, Double>> modulationOpt = getModulationFromQtable(source, destination, v, network.getAllowedModulations(), part);
 				if (!modulationOpt.isPresent()){
 					//unable to find a modulation
 					path.setMetric(Integer.MAX_VALUE);
 					continue pathLoop;
 				}
-				part.setModulation(modulationOpt.get().x, modulationOpt.get().y); //put Q value as metric
+				part.setModulation(modulationOpt.get().getX(), modulationOpt.get().getY().intValue()); //put Q value as metric
 
 
 //				for (Modulation modulation : network.getAllowedModulations())
@@ -160,18 +161,44 @@ public class QL implements IRMSAAlgorithm{
 		return network.getDynamicModulationMetric(modulation, slicesOccupationMetric);
 	}
 
-	private static Optional<Tuple<Modulation,Integer>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int v, List<Modulation> modulations, PathPart part) {
+
+	private static Optional<Tuple<Modulation,Double>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int v, List<Modulation> modulations, PathPart part) {
 		double random = Math.random();
 
 		if (random < EPSILON) {
 			// exploit
-			INDArray qvalues = getQvalues(source, destination, v);
+
+			INDArray qvalues = getQvalues(source, destination, v, getUsageIdx(part));
 			//get the modulation with greatest Q value while fitting the volume (bit rate)
-			return modulations.stream()
+			OptionalDouble max = modulations.stream()
 					.filter(m -> m.modulationDistances[v] > part.getLength())
-					.max(Comparator.comparingInt(m -> qvalues.getInt(getModulationId(m))))
-					.map(m->new Tuple<>(m,
-							- (int)Math.round(qTable.getDouble(getNodeId(source), getNodeId(destination), v, getModulationId(m)))));
+					.mapToDouble(m -> qvalues.getDouble(getModulationId(m)))
+					.max();
+			if (max.isPresent()){
+				return modulations.stream()
+						.filter(m -> qvalues.getDouble(getModulationId(m)) == max.getAsDouble() && m.modulationDistances[v] > part.getLength())
+						.max(Comparator.comparingInt(Simulation::getModulationId))
+						.map(m-> {
+							int l = getLinkId(
+									getNodeId(source), getNodeId(destination));
+							return new Tuple<>(m,
+									- qTable.getDouble(l, v, getUsageIdx(part), getModulationId(m)));
+						});
+
+
+			} else {
+				return Optional.empty();
+			}
+
+//			return modulations.stream()
+//					.filter(m -> m.modulationDistances[v] > part.getLength())
+//					.max(Comparator.comparingDouble(m -> qvalues.getDouble(getModulationId(m))))
+//					.map(m->{
+//						modulationSelected.put(m, modulationSelected.getOrDefault(m, 0L)+1);
+//						return m;
+//					})
+//					.map(m->new Tuple<>(m,
+//							- (int)Math.round(qTable.getDouble(getNodeId(source), getNodeId(destination), v, getModulationId(m)))));
 		} else {
 			//explore by random pick
 			List<Modulation> allowedModulations = modulations.stream()
@@ -179,20 +206,26 @@ public class QL implements IRMSAAlgorithm{
 					.collect(Collectors.toList());
 			int pick = (int) Math.floor(Math.random() * allowedModulations.size());
 
-			return Optional.of(new Tuple<>(modulations.get(pick), -qTable.maxNumber().intValue()));
+			Modulation m = modulations.get(pick);
+			modulationSelected.put(m, modulationSelected.getOrDefault(m, 0L)+1);
+			return Optional.of(new Tuple<>(m, -qTable.maxNumber().doubleValue()));
 		}
 
 	}
 
+
 	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
-		if (learningCount > 10000){
-			return;
-		}
+//		if (learningCount > 10000){
+//			return;
+//		}
 		//calculate reward
-		double reward = allocateResult ?  100 * path.getParts().parallelStream()
-				.mapToDouble(PathPart::getOccupiedSlicesPercentage)
+		double slicePercentageFactor = path.getParts().parallelStream()
+				.mapToDouble(pathPart -> 1.0 - pathPart.getOccupiedSlicesPercentage())
 				.max()
-				.orElse(0) : -1800;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+				.orElse(0);
+		double reward = allocateResult ?  100 * slicePercentageFactor : NEG_REWARD;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+
+
 
 		path.getParts().parallelStream()
 				.forEach(part->{
@@ -201,6 +234,8 @@ public class QL implements IRMSAAlgorithm{
 					if (allocateResult) {
 						double u =  ((double) part.getLength()) / part.getModulation().modulationDistances[v];
 						 r = reward * u;
+//					} else {
+//						r = reward * (1-part.getOccupiedSlicesPercentage());
 					}
 					//Update Q table
 					Simulation.updateQtable(r, v, part);
@@ -210,13 +245,4 @@ public class QL implements IRMSAAlgorithm{
 	}
 
 
-	static class Tuple<X,Y>{
-		X x;
-		Y y;
-
-		public Tuple(X x, Y y) {
-			this.x = x;
-			this.y = y;
-		}
-	}
 }

@@ -2,6 +2,7 @@ package ca.bcit.net;
 
 import ca.bcit.ApplicationResources;
 import ca.bcit.Settings;
+import ca.bcit.Tuple;
 import ca.bcit.graph.Relation;
 import ca.bcit.io.Logger;
 import ca.bcit.io.SimulationSummary;
@@ -11,6 +12,7 @@ import ca.bcit.jfx.components.TaskReadyProgressBar;
 import ca.bcit.jfx.controllers.MainWindowController;
 import ca.bcit.jfx.controllers.SimulationMenuController;
 import ca.bcit.jfx.tasks.SimulationTask;
+import ca.bcit.net.algo.QL;
 import ca.bcit.net.demand.AnycastDemand;
 import ca.bcit.net.demand.Demand;
 import ca.bcit.net.demand.DemandAllocationResult;
@@ -42,6 +44,8 @@ public class Simulation {
     public static final double EPSILON = 0.5;
     public static Map<NetworkNode, Integer> networkNodes = null;
     public static int learningCount = 0;
+    public static Map<Modulation, Long> modulationSelected;
+
 
     public static final String RESULTS_DATA_DIR_NAME = "results data";
     private String resultsDataFileName;
@@ -57,6 +61,7 @@ public class Simulation {
     private double unhandledVolume;
     private final double[] modulationsUsage = new double[6];
     private boolean multipleSimulations = false;
+    public static Map<Tuple<Integer, Integer>, Integer> linkMap;
 
     public Simulation() {
     }
@@ -85,6 +90,7 @@ public class Simulation {
         //initialize Q values
         initQtable(network);
         learningCount = 0;
+        modulationSelected = new HashMap<>();
         /* Q Learning - end */
         int i = 0;
 
@@ -134,12 +140,13 @@ public class Simulation {
                 learningCount++;
 
             } // loop end here
-            try (FileWriter w = new FileWriter("qtable-end.txt")) {
+            try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
+                    new Date().getTime(), erlang, demandsCount, QL.NEG_REWARD))) {
                 w.write(qTable.toStringFull());
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
+            Logger.info("Test: " + modulationSelected.toString());
             // force call the update again here
         } catch (NetworkException e) {
 
@@ -223,6 +230,7 @@ public class Simulation {
         //initialize Q values
         initQtable(network);
         learningCount = 0;
+        modulationSelected = new HashMap<>();
         /* Q Learning - end */
         int i = 0;
 
@@ -272,8 +280,13 @@ public class Simulation {
                 }
                 learningCount++;
             } // loop end here
-            System.out.println(qTable.toStringFull());
-
+            try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
+                    new Date().getTime(), erlang, demandsCount, QL.NEG_REWARD))) {
+                w.write(qTable.toStringFull());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            Logger.info("Test: " + modulationSelected.toString());
             // force call the update again here
         } catch (NetworkException e) {
 
@@ -293,7 +306,7 @@ public class Simulation {
             totalVolume += unhandledVolume;
             ResizableCanvas.getParentController().totalVolume += unhandledVolume;
             i++;
-            Logger.info("i="+i);
+            Logger.info("i=" + i);
 //            System.out.println("i=" + i);
         }
         String algorithm = network.getDemandAllocationAlgorithm().getName();
@@ -442,46 +455,63 @@ public class Simulation {
         initNetworkNodeMap(network);
 
         List<Modulation> allowedModulations = network.getAllowedModulations();
-        int networkNodeSize = networkNodes.size();
+//        int networkNodeSize = networkNodes.size();
 
         //initialize Q table to have values -100000.
-        //qTable[from][to][v][m]
-        //e.g. from node 3 to node 10, v= 0,1,2,... 40 for 10Gb/s, 20, 30... 400 , m = QAM16,
-        //qTable[3][10][0][3]
-        qTable = Nd4j.zeros(networkNodeSize, networkNodeSize, NUM_OF_VOLUMES, allowedModulations.size())
-                .add(-100000.0);
+        //qTable[from][to][v][link-usage%][m]
+        //e.g. from node 3 to node 10, v= 0,1,2,... 40 for 10Gb/s, 20, 30... 400 , m = QAM16,link usage = 50%
+        //qTable[3][10][0][5][3]
+//        qTable = Nd4j.zeros(networkNodeSize, networkNodeSize, NUM_OF_VOLUMES, 10, allowedModulations.size())
+//                .add(-100000.0);
 
 
         HashArray<Relation<NetworkNode, NetworkLink, NetworkPath>> allLinks = network.getAllLinks();
 
+
         //assign initial Q values for each possible link
         //for each link
-        for (Iterator<Relation<NetworkNode, NetworkLink, NetworkPath>> iterator = allLinks.iterator(); iterator.hasNext(); ) {
-            Relation<NetworkNode, NetworkLink, NetworkPath> relation = iterator.next();
-            NetworkNode nodeA = relation.nodeA;
-            NetworkNode nodeB = relation.nodeB;
+//        for (Iterator<Relation<NetworkNode, NetworkLink, NetworkPath>> iterator = allLinks.iterator(); iterator.hasNext(); ) {
+//            Relation<NetworkNode, NetworkLink, NetworkPath> relation = iterator.next();
+//            NetworkNode nodeA = relation.nodeA;
+//            NetworkNode nodeB = relation.nodeB;
+//            int a = getNodeId(nodeA);
+//            if (a < 0) {
+//                continue;
+//            }
+//            int b = getNodeId(nodeB);
+//            if (b < 0) {
+//                continue;
+//            }
+//
+//            //for each available volume, v = volumn / 10 - 1, e.g volume = 10 => v = 0, volume = 400 => v = 39
+//            for (int v = 0; v < 40; v++) {
+//                for (int u = 0; u < 10; u++) {
+//                    //for each modulation method
+//                    for (Modulation m : allowedModulations) {
+//                        //qTable[a][b][v][m] = 0, from node A to node B
+//                        qTable.putScalar(new int[]{a, b, v, u, getModulationId(m)}, 0);
+//                        //qTable[b][a][v][m] = 0, from node B to node A
+//                        qTable.putScalar(new int[]{b, a, v, u, getModulationId(m)}, 0);
+//                    }
+//                }
+//            }
+//
+//
+//        }
+
+        linkMap = new HashMap<>();
+        int l = 0;
+        for (Relation<NetworkNode, NetworkLink, NetworkPath> r : allLinks) {
+            NetworkNode nodeA = r.nodeA;
+            NetworkNode nodeB = r.nodeB;
             int a = getNodeId(nodeA);
-            if (a < 0) {
-                continue;
-            }
             int b = getNodeId(nodeB);
-            if (b < 0) {
-                continue;
-            }
-
-            //for each available volume, v = volumn / 10 - 1, e.g volume = 10 => v = 0, volume = 400 => v = 39
-            for (int v = 0; v < 40; v++) {
-                //for each modulation method
-                for (Modulation m : allowedModulations) {
-                    //qTable[a][b][v][m] = 0, from node A to node B
-                    qTable.putScalar(new int[]{a, b, v, getModulationId(m)}, 0);
-                    //qTable[b][a][v][m] = 0, from node B to node A
-                    qTable.putScalar(new int[]{b, a, v, getModulationId(m)}, 0);
-                }
-            }
-
-
+            linkMap.put(new Tuple<>(a, b), l++);
+//            linkMap.put(new Tuple<>(b, a), l++);
         }
+
+        qTable = Nd4j.zeros(l, NUM_OF_VOLUMES, 10, allowedModulations.size());
+
 
         try (FileWriter w = new FileWriter("qtable-start.txt")) {
             w.write(qTable.toStringFull());
@@ -507,14 +537,32 @@ public class Simulation {
         //calculate Q value
         int s = getNodeId(source);
         int d = getNodeId(destination);
-        double oldQ = qTable.getDouble(s, d, v, getModulationId(modulation)); //qTable[s][d][v][m]
+        int usageIdx = getUsageIdx(part);
+        double oldQ = qTable.getDouble(getLinkId(s, d), v, usageIdx, getModulationId(modulation)); //qTable[s][d][v][m]
         double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
         double newQ = oldQ + LEARNING_RATE * temporalDifference;
 
         //qtable[source][destination][volume][modulation] = new value
 
-        int[] index = {s, d, v, getModulationId(modulation)};
+        int[] index = {getLinkId(s, d), v, usageIdx, getModulationId(modulation)};
         qTable.putScalar(index, newQ);
+    }
+
+    public static int getLinkId(int s, int d) {
+        Tuple<Integer, Integer> key = new Tuple<>(s, d);
+        if (linkMap.containsKey(key)){
+            return linkMap.get(key);
+        }
+        Tuple<Integer, Integer> key1 = new Tuple<>(d, s);
+        if (linkMap.containsKey(key1)){
+            return linkMap.get(key1);
+        }
+        throw new IllegalArgumentException();
+    }
+
+    public static int getUsageIdx(PathPart part) {
+        int x = (int) Math.floor(part.getOccupiedSlicesPercentage() * 10);
+        return Math.min(x, 9);
     }
 
     public static int getModulationId(Modulation m) {
@@ -525,10 +573,18 @@ public class Simulation {
         return networkNodes.getOrDefault(node, -1);
     }
 
-    public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int v) {
-        return qTable.get(NDArrayIndex.point(getNodeId(source)),
-                NDArrayIndex.point(getNodeId(destination)),
+    public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int v, long u) {
+        int s = getNodeId(source);
+        int d = getNodeId(destination);
+        Tuple<Integer, Integer> key = new Tuple<>(s, d);
+        int link = getLinkId(s,d);
+
+        if (link<0 || link >= linkMap.size()){
+            System.out.printf("Invalid link: %d, %d", s, d);
+        }
+        return qTable.get(NDArrayIndex.point(link),
                 NDArrayIndex.point(v),
+                NDArrayIndex.point(u),
                 NDArrayIndex.all());
     }
     // Q Learning - end
