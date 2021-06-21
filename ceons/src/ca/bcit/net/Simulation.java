@@ -138,14 +138,14 @@ public class Simulation {
 
                 task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
                 learningCount++;
-                if (learningCount % 2000 ==0){
-                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
-                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
-                    logRewardStat();
-//                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
-//                            qTable.minNumber().doubleValue()));
-
-                }
+//                if (learningCount % 2000 ==0){
+//                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
+//                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
+//                    logRewardStat();
+////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
+////                            qTable.minNumber().doubleValue()));
+//
+//                }
 
             } // loop end here
             logRewardStat();
@@ -288,13 +288,13 @@ public class Simulation {
                     break;
                 }
                 learningCount++;
-                if (learningCount % 2000 ==0){
-                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
-                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
-                    logRewardStat();
-//                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
-//                            qTable.minNumber().doubleValue()));
-                }
+//                if (learningCount % 2000 ==0){
+//                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
+//                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
+//                    logRewardStat();
+////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
+////                            qTable.minNumber().doubleValue()));
+//                }
             } // loop end here
             logRewardStat();
             try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
