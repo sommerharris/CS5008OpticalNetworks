@@ -4,6 +4,7 @@ import ca.bcit.Tuple;
 import ca.bcit.net.*;
 import ca.bcit.net.demand.Demand;
 import ca.bcit.net.demand.DemandAllocationResult;
+import ca.bcit.net.spectrum.Spectrum;
 import org.nd4j.linalg.api.ndarray.INDArray;
 
 import java.util.*;
@@ -13,19 +14,19 @@ import static ca.bcit.net.Simulation.*;
 
 public class QL implements IRMSAAlgorithm{
 
-	public static final int NEG_REWARD = -3500;
+	public static int negativeReward = -3500;
 
 	public String getKey(){
 		return "QL";
-	};
+	}
 
 	public String getName(){
 		return "QL";
-	};
+	}
 
 	public String getDocumentationURL(){
 		return "https://pubsonline.informs.org/doi/pdf/10.1287/opre.24.6.1164";
-	};
+	}
 
 	@Override
 	public DemandAllocationResult allocateDemand(Demand demand, Network network) {
@@ -47,7 +48,7 @@ public class QL implements IRMSAAlgorithm{
 				if (demand.allocate(network, path)) {
 					workingPathSuccess = true;
 					//update Q table as the demand is allocated successfully
-					updateQtable(volume, path, true);
+					updateQtableWhenSuccessful(volume, path, network.getAllowedModulations());
 					break;
 				}
 
@@ -58,8 +59,11 @@ public class QL implements IRMSAAlgorithm{
 		}
 		if (!workingPathSuccess) {
 			//update Q table as none of candidate paths is allocated successfully
-			for (PartedPath path : candidatePaths) {
-				updateQtable(volume, path, false);
+			List<Modulation> allowedModulations = network.getAllowedModulations();
+			if (learningCount< 10000) {
+				for (PartedPath path : candidatePaths) {
+					updateQtableWhenFailed(volume, path, allowedModulations);
+				}
 			}
 			return DemandAllocationResult.NO_SPECTRUM;
 		}
@@ -212,37 +216,104 @@ public class QL implements IRMSAAlgorithm{
 		}
 
 	}
-
-
-	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
-//		if (learningCount > 10000){
-//			return;
-//		}
-		//calculate reward
-		double slicePercentageFactor = path.getParts().parallelStream()
-				.mapToDouble(pathPart -> 1.0 - pathPart.getOccupiedSlicesPercentage())
-				.max()
-				.orElse(0);
-		double reward = allocateResult ?  100 * slicePercentageFactor : NEG_REWARD;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
-
-
-
-		path.getParts().parallelStream()
+	public static LinkedList<Double> positiveRewards = new LinkedList<>();
+	private void updateQtableWhenSuccessful(int v, PartedPath path, List<Modulation> modulations){
+		double reward = 100 * slicePercentageFactor(path);
+		path.getParts().stream()
 				.forEach(part->{
-					//update reward base on the part length as a % of max modulation distance.
-					double r = reward;
-					if (allocateResult) {
-						double u =  ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-						 r = reward * u;
-//					} else {
-//						r = reward * (1-part.getOccupiedSlicesPercentage());
+					double r = reward * ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+					int sliceConsumption = part.getModulation().slicesConsumption[v];
+					Spectrum slices = part.getSlices();
+					Optional<Modulation> minSlicesModulation = modulations.stream()
+							.filter(m -> part.getModulation() != m
+									&& m.slicesConsumption[v] < sliceConsumption
+									&& slices.canAllocateWorking(m.slicesConsumption[v]) != -1)
+							.min(Comparator.comparing(m -> m.slicesConsumption[v]));
+					if (minSlicesModulation.isPresent()){
+//						r *= ((double) minSlicesModulation.get().slicesConsumption[v]) / sliceConsumption;
+						r = r * 0.5;
 					}
 					//Update Q table
 					Simulation.updateQtable(r, v, part);
-
+					positiveRewards.add(r);
 				});
+	}
+
+	private double slicePercentageFactor(PartedPath path) {
+		return path.getParts().stream()
+				.mapToDouble(pathPart -> 1.0 - pathPart.getOccupiedSlicesPercentage())
+				.max()
+				.orElse(0);
+	}
+
+	public static LinkedList<Number> negativeRewards = new LinkedList<>();
+	private void updateQtableWhenFailed(int v, PartedPath path, List<Modulation> modulations){
+		for(PathPart part: path.getParts()){
+			Spectrum slices = part.getSlices();
+			int slicesCount, offset;
+			slicesCount = part.getModulation().slicesConsumption[v];
+			offset = slices.canAllocateWorking(slicesCount);
+
+			if (offset == -1){
+				long possibleAllocationCount = modulations.stream()
+						.filter(m -> part.getModulation()!=m
+							 &&	slices.canAllocateWorking(m.slicesConsumption[v]) != -1
+						)
+						.count();
+//				double discount = 0.5 + 0.5 * possibleAllocationCount / modulations.size() ;
+
+				double reward = possibleAllocationCount > 0 ?  negativeReward << 1 : negativeReward;
+				Simulation.updateQtable(reward, v, part);
+				negativeRewards.add(reward);
+
+				break;
+			}
+
+		}
 
 	}
+
+//	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
+////		if (learningCount > 10000){
+////			return;
+////		}
+//		//calculate reward
+//		double slicePercentageFactor = slicePercentageFactor(path);
+//		double reward = (allocateResult ?  100  : NEG_REWARD)* slicePercentageFactor;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
+//
+//
+//		if (allocateResult) {
+//		} else {
+//			path.getParts().stream()
+//					.filter(p->p.getModulation()==null)
+//					.forEach(part->{
+//						Simulation.updateQtable(reward, v, part);
+//
+//					});
+//		}
+//
+//		path.getParts().stream()
+//				.forEach(part->{
+//					//done: -ve also * slice % * length %
+//					//update reward base on the part length as a % of max modulation distance.
+////					double u =  (part.getModulation() == null)
+////							? slicePercentageFactor
+////							: ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+//					double r ;
+////					if (allocateResult) {
+////
+//						 r = reward * ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+////					} else {
+////						//* (1-part.getOccupiedSlicesPercentage())
+////						r = reward * u ;
+//
+////					}
+//					//Update Q table
+//					Simulation.updateQtable(r, v, part);
+//
+//				});
+//
+//	}
 
 
 }

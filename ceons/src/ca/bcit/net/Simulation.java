@@ -138,10 +138,19 @@ public class Simulation {
 
                 task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
                 learningCount++;
+                if (learningCount % 2000 ==0){
+                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
+                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
+                    logRewardStat();
+//                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
+//                            qTable.minNumber().doubleValue()));
+
+                }
 
             } // loop end here
+            logRewardStat();
             try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
-                    new Date().getTime(), erlang, demandsCount, QL.NEG_REWARD))) {
+                    new Date().getTime(), erlang, demandsCount, QL.negativeReward))) {
                 w.write(qTable.toStringFull());
             } catch (IOException e) {
                 e.printStackTrace();
@@ -279,9 +288,17 @@ public class Simulation {
                     break;
                 }
                 learningCount++;
+                if (learningCount % 2000 ==0){
+                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
+                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
+                    logRewardStat();
+//                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
+//                            qTable.minNumber().doubleValue()));
+                }
             } // loop end here
+            logRewardStat();
             try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
-                    new Date().getTime(), erlang, demandsCount, QL.NEG_REWARD))) {
+                    new Date().getTime(), erlang, demandsCount, QL.negativeReward))) {
                 w.write(qTable.toStringFull());
             } catch (IOException e) {
                 e.printStackTrace();
@@ -357,6 +374,17 @@ public class Simulation {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private void logRewardStat() {
+        LinkedList<Number> nRewards = QL.negativeRewards;
+        DoubleSummaryStatistics nStat = nRewards.stream().mapToDouble(Number::doubleValue).summaryStatistics();
+        Logger.info(String.format("-ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
+                nStat.getSum(), nStat.getCount(), nStat.getAverage(), nStat.getMax(), nStat.getMin()));
+        LinkedList<Double> pRewards = QL.positiveRewards;
+        DoubleSummaryStatistics pStat = pRewards.stream().mapToDouble(d -> d).summaryStatistics();
+        Logger.info(String.format("+ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
+                pStat.getSum(), pStat.getCount(), pStat.getAverage(), pStat.getMax(), pStat.getMin()));
     }
 
     /**
