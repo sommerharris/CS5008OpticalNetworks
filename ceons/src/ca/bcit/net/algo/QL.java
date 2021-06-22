@@ -47,6 +47,7 @@ public class QL implements IRMSAAlgorithm{
 			for (PartedPath path : candidatePaths)
 				if (demand.allocate(network, path)) {
 					workingPathSuccess = true;
+					successCount ++;
 					//update Q table as the demand is allocated successfully
 					updateQtableWhenSuccessful(volume, path, network.getAllowedModulations());
 					break;
@@ -60,11 +61,12 @@ public class QL implements IRMSAAlgorithm{
 		if (!workingPathSuccess) {
 			//update Q table as none of candidate paths is allocated successfully
 			List<Modulation> allowedModulations = network.getAllowedModulations();
-			if (learningCount< 10000) {
+//			if (learningCount< 10000) { //TODO consider remove
 				for (PartedPath path : candidatePaths) {
 					updateQtableWhenFailed(volume, path, allowedModulations);
 				}
-			}
+//			}
+			failCount++;
 			return DemandAllocationResult.NO_SPECTRUM;
 		}
 		try {
@@ -187,11 +189,7 @@ public class QL implements IRMSAAlgorithm{
 						.map(m-> {
 							int l = getLinkId(
 									getNodeId(source), getNodeId(destination));
-							if (learningCount<8000){
-								countModulation(modCountBefore10000, m);
-							} else {
-								countModulation(modCountAfter10000, m);
-							}
+
 							return new Tuple<>(m,
 									- qTable.getDouble(l, v, getUsageIdx(part), getModulationId(m)));
 						});
@@ -229,28 +227,40 @@ public class QL implements IRMSAAlgorithm{
 	}
 	public static LinkedList<Double> positiveRewards = new LinkedList<>();
 	private void updateQtableWhenSuccessful(int v, PartedPath path, List<Modulation> modulations){
+		if (learningCount>8000){
+			return;
+		}
 		double reward = 100 * slicePercentageFactor(path);
 		path.getParts().stream()
 				.forEach(part->{
-					double r = reward * ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-					int sliceConsumption = part.getModulation().slicesConsumption[v];
-					Spectrum slices = part.getSlices();
-					Optional<Modulation> minSlicesModulation = modulations.stream()
-							.filter(m -> part.getModulation() != m
-									&& m.slicesConsumption[v] < sliceConsumption
-									&& slices.canAllocateWorking(m.slicesConsumption[v]) != -1)
-							.min(Comparator.comparing(m -> m.slicesConsumption[v]));
-					if (minSlicesModulation.isPresent()){
-//						r *= ((double) minSlicesModulation.get().slicesConsumption[v]) / sliceConsumption;
-						r = negativeReward * 2;
-					}
-					//Update Q table
-					Simulation.updateQtable(r, v, part);
-					positiveRewards.add(r);
+					rewardSuccessful(v, modulations, reward, part);
 				});
 	}
 
+	private void rewardSuccessful(int v, List<Modulation> modulations, double reward, PathPart part) {
+		Modulation modulation = part.getModulation();
+
+		countModulation(modulationCount, modulation);
+
+		double r = reward * ((double) part.getLength()) / part.getModulation().modulationDistances[v];
+		int sliceConsumption = part.getModulation().slicesConsumption[v];
+		Spectrum slices = part.getSlices();
+		Optional<Modulation> minSlicesModulation = modulations.stream()
+				.filter(m -> part.getModulation() != m
+						&& m.slicesConsumption[v] < sliceConsumption
+						&& slices.canAllocateWorking(m.slicesConsumption[v]) != -1)
+				.min(Comparator.comparing(m -> m.slicesConsumption[v]));
+		if (minSlicesModulation.isPresent()){
+//						r *= ((double) minSlicesModulation.get().slicesConsumption[v]) / sliceConsumption;
+			r = negativeReward * 2;
+		}
+		//Update Q table
+		Simulation.updateQtable(r, v, part);
+		positiveRewards.add(r);
+	}
+
 	private double slicePercentageFactor(PartedPath path) {
+
 		return path.getParts().stream()
 				.mapToDouble(pathPart -> 1.0 - pathPart.getOccupiedSlicesPercentage())
 				.max()
@@ -259,6 +269,10 @@ public class QL implements IRMSAAlgorithm{
 
 	public static LinkedList<Number> negativeRewards = new LinkedList<>();
 	private void updateQtableWhenFailed(int v, PartedPath path, List<Modulation> modulations){
+		if (learningCount>8000){
+			return;
+		}
+		double successfulReward = 100 * slicePercentageFactor(path);
 		for(PathPart part: path.getParts()){
 			Spectrum slices = part.getSlices();
 			int slicesCount, offset;
@@ -266,6 +280,7 @@ public class QL implements IRMSAAlgorithm{
 			offset = slices.canAllocateWorking(slicesCount);
 
 			if (offset == -1){//cannot allocate
+				countModulation(modulationFailed, part.getModulation());
 				long possibleAllocationCount
 						= modulations.stream()
 						.filter(m -> part.getModulation()!=m
@@ -280,8 +295,10 @@ public class QL implements IRMSAAlgorithm{
 
 				break;
 			} else {
-				Simulation.updateQtable(negativeReward, v, part);
-				negativeRewards.add(negativeReward);
+
+				rewardSuccessful(v, modulations, successfulReward, part);
+//				Simulation.updateQtable(negativeReward, v, part);
+				positiveRewards.add(successfulReward);
 			}
 
 

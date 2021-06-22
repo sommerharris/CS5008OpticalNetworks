@@ -43,14 +43,17 @@ public class Simulation {
     public static final double LEARNING_RATE = 0.9;
     public static double epsilon = 0.5;
     public static Map<NetworkNode, Integer> networkNodes = null;
-    public static int learningCount = 0;
+    public static int learningCount ;
+    public static int successCount ;
+    public static int failCount ;
     public static Map<Modulation, Long> modulationSelected;
-    public static Map<Modulation, Integer> modCountAfter10000 = new HashMap<>();
-    public static Map<Modulation, Integer> modCountBefore10000 = new HashMap<>();
+    public static Map<Modulation, Integer> modulationFailed = new HashMap<>();
+    public static Map<Modulation, Integer> modulationCount = new HashMap<>();
     public static void countModulation(Map<Modulation, Integer> map, Modulation m){
         int c = map.getOrDefault(m, 0);
         map.put(m, c+1);
     }
+
 
     public static final String RESULTS_DATA_DIR_NAME = "results data";
     private String resultsDataFileName;
@@ -95,6 +98,8 @@ public class Simulation {
         //initialize Q values
         initQtable(network);
         learningCount = 0;
+        successCount = 0;
+        failCount = 0;
         modulationSelected = new HashMap<>();
         /* Q Learning - end */
         int i = 0;
@@ -143,14 +148,17 @@ public class Simulation {
 
                 task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
                 learningCount++;
-//                if (learningCount % 2000 ==0){
+                if (learningCount % 2000 ==0){
 //                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
 //                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
 //                    logRewardStat();
 ////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
 ////                            qTable.minNumber().doubleValue()));
 //
-//                }
+                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, successCount, modulationCount);
+                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, failCount, modulationFailed);
+                    System.out.printf("Spectrum Blocked Volume: %f %n", spectrumBlockedVolume);
+                }
 
             } // loop end here
             logRewardStat();
@@ -244,6 +252,8 @@ public class Simulation {
         //initialize Q values
         initQtable(network);
         learningCount = 0;
+        successCount = 0;
+        failCount = 0;
         modulationSelected = new HashMap<>();
         /* Q Learning - end */
         int i = 0;
@@ -293,13 +303,17 @@ public class Simulation {
                     break;
                 }
                 learningCount++;
-//                if (learningCount % 2000 ==0){
+                if (learningCount % 2000 ==0){
 //                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
 //                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
 //                    logRewardStat();
 ////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
 ////                            qTable.minNumber().doubleValue()));
-//                }
+                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, successCount, modulationCount);
+                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, failCount, modulationFailed);
+                    System.out.printf("Spectrum Blocked Volume: %f %n", spectrumBlockedVolume);
+                }
+
             } // loop end here
             logRewardStat();
             try (FileWriter w = new FileWriter(String.format("qtable-end-%d-er%d-req%d-reward%d.txt",
@@ -311,8 +325,6 @@ public class Simulation {
             Logger.info("Test: " + modulationSelected.toString());
             // force call the update again here
         } catch (NetworkException e) {
-
-
             //TODO should exclude the first 100,000 (say) due to q learning
             Logger.info(LocaleUtils.translate("network_exception_label") + " " + LocaleUtils.translate(e.getMessage()));
             for (; generator.getGeneratedDemandsCount() < demandsCount; ) {
@@ -390,8 +402,8 @@ public class Simulation {
         DoubleSummaryStatistics pStat = pRewards.stream().mapToDouble(d -> d).summaryStatistics();
         System.out.println(String.format("+ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
                 pStat.getSum(), pStat.getCount(), pStat.getAverage(), pStat.getMax(), pStat.getMin()));
-        System.out.printf("Modulation before 8000 %s %n", modCountBefore10000);
-        System.out.printf("Modulation after 8000 %s %n", modCountAfter10000);
+        System.out.printf("After %d request, modulation: %s %n", learningCount, modulationCount);
+
     }
 
     /**
