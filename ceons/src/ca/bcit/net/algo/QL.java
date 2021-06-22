@@ -14,6 +14,8 @@ import java.util.stream.Collectors;
 import static ca.bcit.net.Simulation.*;
 
 public class QL implements IRMSAAlgorithm{
+	public static double demandCount;
+
 	public String getKey(){
 		return "QL";
 	};
@@ -160,10 +162,20 @@ public class QL implements IRMSAAlgorithm{
 		return network.getDynamicModulationMetric(modulation, slicesOccupationMetric);
 	}
 
+	private static double epsilon(int learningCount){
+		double pc =  ((double) learningCount)/demandCount;
+		if (pc <= 0.25){
+			return 0.25;
+		}
+		if (pc <=0.5){
+			return 0.5;
+		}
+		return 0.75;
+	}
 	private static Optional<Tuple<Modulation,Integer>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int v, List<Modulation> modulations, PathPart part) {
 		double random = Math.random();
 
-		if (random < EPSILON) {
+		if (random < epsilon(learningCount)) {
 			// exploit
 			INDArray qvalues = getQvalues(source, destination, v);
 			//get the modulation with greatest Q value while fitting the volume (bit rate)

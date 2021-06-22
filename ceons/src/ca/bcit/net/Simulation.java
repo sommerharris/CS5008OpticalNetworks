@@ -11,6 +11,7 @@ import ca.bcit.jfx.components.TaskReadyProgressBar;
 import ca.bcit.jfx.controllers.MainWindowController;
 import ca.bcit.jfx.controllers.SimulationMenuController;
 import ca.bcit.jfx.tasks.SimulationTask;
+import ca.bcit.net.algo.QL;
 import ca.bcit.net.demand.AnycastDemand;
 import ca.bcit.net.demand.Demand;
 import ca.bcit.net.demand.DemandAllocationResult;
@@ -37,9 +38,8 @@ public class Simulation {
     public static final int LEARNING_COUNT = 10000;
     public static INDArray qTable = null;
     public static final int NUM_OF_VOLUMES = 40;
-    public static final double DISCOUNT_FACTOR = 0.8;
-    public static final double LEARNING_RATE = 0.9;
-    public static final double EPSILON = 0.5;
+    public static final double DISCOUNT_FACTOR = 1.0;
+    public static final double LEARNING_RATE = 0.5;
     public static Map<NetworkNode, Integer> networkNodes = null;
     public static int learningCount = 0;
 
@@ -236,7 +236,7 @@ public class Simulation {
         generator.setReplicaPreservation(replicaPreservation);
         network.setSeed(seed);
         Random linkCutter = new Random(seed);
-
+        QL.demandCount = demandsCount;
         try {
             ResizableCanvas.getParentController().updateGraph();
 
