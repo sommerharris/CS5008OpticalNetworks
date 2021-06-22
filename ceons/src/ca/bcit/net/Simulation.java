@@ -41,11 +41,16 @@ public class Simulation {
     public static final int NUM_OF_VOLUMES = 40;
     public static final double DISCOUNT_FACTOR = 0.8;
     public static final double LEARNING_RATE = 0.9;
-    public static final double EPSILON = 0.5;
+    public static double epsilon = 0.5;
     public static Map<NetworkNode, Integer> networkNodes = null;
     public static int learningCount = 0;
     public static Map<Modulation, Long> modulationSelected;
-
+    public static Map<Modulation, Integer> modCountAfter10000 = new HashMap<>();
+    public static Map<Modulation, Integer> modCountBefore10000 = new HashMap<>();
+    public static void countModulation(Map<Modulation, Integer> map, Modulation m){
+        int c = map.getOrDefault(m, 0);
+        map.put(m, c+1);
+    }
 
     public static final String RESULTS_DATA_DIR_NAME = "results data";
     private String resultsDataFileName;
@@ -379,12 +384,14 @@ public class Simulation {
     private void logRewardStat() {
         LinkedList<Number> nRewards = QL.negativeRewards;
         DoubleSummaryStatistics nStat = nRewards.stream().mapToDouble(Number::doubleValue).summaryStatistics();
-        Logger.info(String.format("-ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
+        System.out.println(String.format("-ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
                 nStat.getSum(), nStat.getCount(), nStat.getAverage(), nStat.getMax(), nStat.getMin()));
         LinkedList<Double> pRewards = QL.positiveRewards;
         DoubleSummaryStatistics pStat = pRewards.stream().mapToDouble(d -> d).summaryStatistics();
-        Logger.info(String.format("+ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
+        System.out.println(String.format("+ve rewards sum=%f, count=%d, mean=%f, max=%f, min=%f ",
                 pStat.getSum(), pStat.getCount(), pStat.getAverage(), pStat.getMax(), pStat.getMin()));
+        System.out.printf("Modulation before 8000 %s %n", modCountBefore10000);
+        System.out.printf("Modulation after 8000 %s %n", modCountAfter10000);
     }
 
     /**

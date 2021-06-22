@@ -168,8 +168,10 @@ public class QL implements IRMSAAlgorithm{
 
 	private static Optional<Tuple<Modulation,Double>> getModulationFromQtable(NetworkNode source, NetworkNode destination, int v, List<Modulation> modulations, PathPart part) {
 		double random = Math.random();
-
-		if (random < EPSILON) {
+//		if (learningCount==5000){
+//			epsilon = 0.9;
+//		}
+		if (random < epsilon) {
 			// exploit
 
 			INDArray qvalues = getQvalues(source, destination, v, getUsageIdx(part));
@@ -185,6 +187,11 @@ public class QL implements IRMSAAlgorithm{
 						.map(m-> {
 							int l = getLinkId(
 									getNodeId(source), getNodeId(destination));
+							if (learningCount<8000){
+								countModulation(modCountBefore10000, m);
+							} else {
+								countModulation(modCountAfter10000, m);
+							}
 							return new Tuple<>(m,
 									- qTable.getDouble(l, v, getUsageIdx(part), getModulationId(m)));
 						});
@@ -212,7 +219,11 @@ public class QL implements IRMSAAlgorithm{
 
 			Modulation m = modulations.get(pick);
 			modulationSelected.put(m, modulationSelected.getOrDefault(m, 0L)+1);
-			return Optional.of(new Tuple<>(m, -qTable.maxNumber().doubleValue()));
+			return Optional.of(new Tuple<>(m,
+//					-qTable.getDouble(getLinkId(
+//							getNodeId(source), getNodeId(destination)), v, getUsageIdx(part), getModulationId(m))
+					-qTable.maxNumber().doubleValue()
+			));
 		}
 
 	}
@@ -231,7 +242,7 @@ public class QL implements IRMSAAlgorithm{
 							.min(Comparator.comparing(m -> m.slicesConsumption[v]));
 					if (minSlicesModulation.isPresent()){
 //						r *= ((double) minSlicesModulation.get().slicesConsumption[v]) / sliceConsumption;
-						r = r * 0.5;
+						r = negativeReward * 2;
 					}
 					//Update Q table
 					Simulation.updateQtable(r, v, part);
@@ -254,66 +265,30 @@ public class QL implements IRMSAAlgorithm{
 			slicesCount = part.getModulation().slicesConsumption[v];
 			offset = slices.canAllocateWorking(slicesCount);
 
-			if (offset == -1){
-				long possibleAllocationCount = modulations.stream()
+			if (offset == -1){//cannot allocate
+				long possibleAllocationCount
+						= modulations.stream()
 						.filter(m -> part.getModulation()!=m
 							 &&	slices.canAllocateWorking(m.slicesConsumption[v]) != -1
 						)
 						.count();
 //				double discount = 0.5 + 0.5 * possibleAllocationCount / modulations.size() ;
 
-				double reward = possibleAllocationCount > 0 ?  negativeReward << 1 : negativeReward;
+				double reward = possibleAllocationCount > 0 ?  negativeReward * 2 : negativeReward;
 				Simulation.updateQtable(reward, v, part);
 				negativeRewards.add(reward);
 
 				break;
+			} else {
+				Simulation.updateQtable(negativeReward, v, part);
+				negativeRewards.add(negativeReward);
 			}
+
 
 		}
 
 	}
 
-//	private void updateQtable(int v, PartedPath path, boolean allocateResult) {
-////		if (learningCount > 10000){
-////			return;
-////		}
-//		//calculate reward
-//		double slicePercentageFactor = slicePercentageFactor(path);
-//		double reward = (allocateResult ?  100  : NEG_REWARD)* slicePercentageFactor;		//tested -800, -500, -1800 - seems the more -ve the reward for unallocated path, the lower the spectrum blocking %
-//
-//
-//		if (allocateResult) {
-//		} else {
-//			path.getParts().stream()
-//					.filter(p->p.getModulation()==null)
-//					.forEach(part->{
-//						Simulation.updateQtable(reward, v, part);
-//
-//					});
-//		}
-//
-//		path.getParts().stream()
-//				.forEach(part->{
-//					//done: -ve also * slice % * length %
-//					//update reward base on the part length as a % of max modulation distance.
-////					double u =  (part.getModulation() == null)
-////							? slicePercentageFactor
-////							: ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-//					double r ;
-////					if (allocateResult) {
-////
-//						 r = reward * ((double) part.getLength()) / part.getModulation().modulationDistances[v];
-////					} else {
-////						//* (1-part.getOccupiedSlicesPercentage())
-////						r = reward * u ;
-//
-////					}
-//					//Update Q table
-//					Simulation.updateQtable(r, v, part);
-//
-//				});
-//
-//	}
 
 
 }
