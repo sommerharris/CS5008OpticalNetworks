@@ -2,7 +2,6 @@ package ca.bcit.net;
 
 import ca.bcit.ApplicationResources;
 import ca.bcit.Settings;
-import ca.bcit.Tuple;
 import ca.bcit.graph.Relation;
 import ca.bcit.io.Logger;
 import ca.bcit.io.SimulationSummary;
@@ -40,15 +39,15 @@ public class Simulation {
     public static INDArray qTable = null;
     public static final int NUM_OF_VOLUMES = 40;
     public static final double DISCOUNT_FACTOR = 0.8;
-    public static final double LEARNING_RATE = 0.9;
+    public static final double LEARNING_RATE = 0.8;
     public static double epsilon = 0.5;
-    public static Map<NetworkNode, Integer> networkNodes = null;
     public static int learningCount ;
     public static int successCount ;
     public static int failCount ;
     public static Map<Modulation, Long> modulationSelected;
     public static Map<Modulation, Integer> modulationFailed = new HashMap<>();
     public static Map<Modulation, Integer> modulationCount = new HashMap<>();
+    public static int minLength, maxLength;
     public static void countModulation(Map<Modulation, Integer> map, Modulation m){
         int c = map.getOrDefault(m, 0);
         map.put(m, c+1);
@@ -69,7 +68,7 @@ public class Simulation {
     private double unhandledVolume;
     private final double[] modulationsUsage = new double[6];
     private boolean multipleSimulations = false;
-    public static Map<Tuple<Integer, Integer>, Integer> linkMap;
+
 
     public Simulation() {
     }
@@ -96,11 +95,14 @@ public class Simulation {
 
         /* Q Learning - start */
         //initialize Q values
+        minLength = Integer.MAX_VALUE;
+        maxLength = Integer.MIN_VALUE;
         initQtable(network);
         learningCount = 0;
         successCount = 0;
         failCount = 0;
         modulationSelected = new HashMap<>();
+
         /* Q Learning - end */
         int i = 0;
 
@@ -149,15 +151,11 @@ public class Simulation {
                 task.updateProgress(generator.getGeneratedDemandsCount(), demandsCount);
                 learningCount++;
                 if (learningCount % 2000 ==0){
-//                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
-//                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
-//                    logRewardStat();
-////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
-////                            qTable.minNumber().doubleValue()));
-//
-                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, successCount, modulationCount);
-                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, failCount, modulationFailed);
-                    System.out.printf("Spectrum Blocked Volume: %f %n", spectrumBlockedVolume);
+                    System.out.printf("After %d(%d) request, successful modulation: %s %n", learningCount, successCount, modulationCount);
+                    System.out.printf("After %d(%d) request, failed modulation: %s %n", learningCount, failCount, modulationFailed);
+                    System.out.printf("Spectrum Blocked Volume: %f (%f) %n", spectrumBlockedVolume, spectrumBlockedVolume/totalVolume);
+                    System.out.printf("Regenerator Blocked Volume: %f (%f) %n", regeneratorsBlockedVolume, regeneratorsBlockedVolume/totalVolume);
+                    System.out.printf("total Blocked Volume: %f (%f) %n", spectrumBlockedVolume + regeneratorsBlockedVolume, (spectrumBlockedVolume+regeneratorsBlockedVolume)/totalVolume);
                 }
 
             } // loop end here
@@ -250,6 +248,8 @@ public class Simulation {
 
         /* Q Learning - start */
         //initialize Q values
+        minLength = Integer.MAX_VALUE;
+        maxLength = Integer.MIN_VALUE;
         initQtable(network);
         learningCount = 0;
         successCount = 0;
@@ -304,14 +304,11 @@ public class Simulation {
                 }
                 learningCount++;
                 if (learningCount % 2000 ==0){
-//                    Logger.info(String.format("network totalVolume=%d, spectrumBlockedVolume=%d spectrum blocking =%f%%",
-//                            (int)totalVolume, (int)spectrumBlockedVolume, spectrumBlockedVolume / totalVolume * 100));
-//                    logRewardStat();
-////                    Logger.info(String.format("q table: max=%f min=%f", qTable.maxNumber().doubleValue(),
-////                            qTable.minNumber().doubleValue()));
-                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, successCount, modulationCount);
-                    System.out.printf("After %d(%d) request, modulation: %s %n", learningCount, failCount, modulationFailed);
-                    System.out.printf("Spectrum Blocked Volume: %f %n", spectrumBlockedVolume);
+                    System.out.printf("After %d(%d) request, successful modulation: %s %n", learningCount, successCount, modulationCount);
+                    System.out.printf("After %d(%d) request, failed modulation: %s %n", learningCount, failCount, modulationFailed);
+                    System.out.printf("Spectrum Blocked Volume: %f (%f) %n", spectrumBlockedVolume, spectrumBlockedVolume/totalVolume);
+                    System.out.printf("Regenerator Blocked Volume: %f (%f) %n", regeneratorsBlockedVolume, regeneratorsBlockedVolume/totalVolume);
+                    System.out.printf("total Blocked Volume: %f (%f) %n", spectrumBlockedVolume + regeneratorsBlockedVolume, (spectrumBlockedVolume+regeneratorsBlockedVolume)/totalVolume);
                 }
 
             } // loop end here
@@ -341,7 +338,6 @@ public class Simulation {
             ResizableCanvas.getParentController().totalVolume += unhandledVolume;
             i++;
             Logger.info("i=" + i);
-//            System.out.println("i=" + i);
         }
         String algorithm = network.getDemandAllocationAlgorithm().getName();
 
@@ -499,65 +495,13 @@ public class Simulation {
 
     // Q Learning - start
     private static void initQtable(Network network) {
-        initNetworkNodeMap(network);
 
         List<Modulation> allowedModulations = network.getAllowedModulations();
-//        int networkNodeSize = networkNodes.size();
-
-        //initialize Q table to have values -100000.
-        //qTable[from][to][v][link-usage%][m]
-        //e.g. from node 3 to node 10, v= 0,1,2,... 40 for 10Gb/s, 20, 30... 400 , m = QAM16,link usage = 50%
-        //qTable[3][10][0][5][3]
-//        qTable = Nd4j.zeros(networkNodeSize, networkNodeSize, NUM_OF_VOLUMES, 10, allowedModulations.size())
-//                .add(-100000.0);
 
 
         HashArray<Relation<NetworkNode, NetworkLink, NetworkPath>> allLinks = network.getAllLinks();
-
-
-        //assign initial Q values for each possible link
-        //for each link
-//        for (Iterator<Relation<NetworkNode, NetworkLink, NetworkPath>> iterator = allLinks.iterator(); iterator.hasNext(); ) {
-//            Relation<NetworkNode, NetworkLink, NetworkPath> relation = iterator.next();
-//            NetworkNode nodeA = relation.nodeA;
-//            NetworkNode nodeB = relation.nodeB;
-//            int a = getNodeId(nodeA);
-//            if (a < 0) {
-//                continue;
-//            }
-//            int b = getNodeId(nodeB);
-//            if (b < 0) {
-//                continue;
-//            }
-//
-//            //for each available volume, v = volumn / 10 - 1, e.g volume = 10 => v = 0, volume = 400 => v = 39
-//            for (int v = 0; v < 40; v++) {
-//                for (int u = 0; u < 10; u++) {
-//                    //for each modulation method
-//                    for (Modulation m : allowedModulations) {
-//                        //qTable[a][b][v][m] = 0, from node A to node B
-//                        qTable.putScalar(new int[]{a, b, v, u, getModulationId(m)}, 0);
-//                        //qTable[b][a][v][m] = 0, from node B to node A
-//                        qTable.putScalar(new int[]{b, a, v, u, getModulationId(m)}, 0);
-//                    }
-//                }
-//            }
-//
-//
-//        }
-
-        linkMap = new HashMap<>();
-        int l = 0;
-        for (Relation<NetworkNode, NetworkLink, NetworkPath> r : allLinks) {
-            NetworkNode nodeA = r.nodeA;
-            NetworkNode nodeB = r.nodeB;
-            int a = getNodeId(nodeA);
-            int b = getNodeId(nodeB);
-            linkMap.put(new Tuple<>(a, b), l++);
-//            linkMap.put(new Tuple<>(b, a), l++);
-        }
-
-        qTable = Nd4j.zeros(l, NUM_OF_VOLUMES, 10, allowedModulations.size());
+        //qTable[volume][usage][modulation]
+        qTable = Nd4j.zeros(  NUM_OF_VOLUMES, 10, allowedModulations.size());
 
 
         try (FileWriter w = new FileWriter("qtable-start.txt")) {
@@ -568,13 +512,11 @@ public class Simulation {
 
     }
 
-    private static void initNetworkNodeMap(Network network) {
-        NetworkNode[] nodes = network.nodes.values().toArray(new NetworkNode[0]);
-        networkNodes = new HashMap<>();
-        for (int i = 0; i < nodes.length; i++) {
-            networkNodes.put(nodes[i], i);
-        }
+    public static int getLengthIdx(int length){
+        int r =( 10 * (length - minLength) ) / (maxLength - minLength + 1);
+        return r;
     }
+
 
     public static void updateQtable(double reward, int v, PathPart part) {
         NetworkNode source = part.source;
@@ -582,33 +524,22 @@ public class Simulation {
         Modulation modulation = part.getModulation();
 
         //calculate Q value
-        int s = getNodeId(source);
-        int d = getNodeId(destination);
         int usageIdx = getUsageIdx(part);
-        double oldQ = qTable.getDouble(getLinkId(s, d), v, usageIdx, getModulationId(modulation)); //qTable[s][d][v][m]
+        double oldQ = qTable.getDouble(
+                v, usageIdx, getModulationId(modulation)); //qTable[volume][usage][modulation]
         double temporalDifference = reward + DISCOUNT_FACTOR * qTable.maxNumber().doubleValue() - oldQ;
         double newQ = oldQ + LEARNING_RATE * temporalDifference;
 
-        //qtable[source][destination][volume][modulation] = new value
-
-        int[] index = {getLinkId(s, d), v, usageIdx, getModulationId(modulation)};
+        int[] index = {
+                v, usageIdx, getModulationId(modulation)};
         qTable.putScalar(index, newQ);
     }
 
-    public static int getLinkId(int s, int d) {
-        Tuple<Integer, Integer> key = new Tuple<>(s, d);
-        if (linkMap.containsKey(key)){
-            return linkMap.get(key);
-        }
-        Tuple<Integer, Integer> key1 = new Tuple<>(d, s);
-        if (linkMap.containsKey(key1)){
-            return linkMap.get(key1);
-        }
-        throw new IllegalArgumentException();
-    }
+
 
     public static int getUsageIdx(PathPart part) {
-        int x = (int) Math.floor(part.getOccupiedSlicesPercentage() * 10);
+        double occupiedSlicesPercentage = part.getOccupiedSlicesPercentage();
+        int x = (int) Math.floor(occupiedSlicesPercentage * 10);
         return Math.min(x, 9);
     }
 
@@ -616,20 +547,10 @@ public class Simulation {
         return Arrays.binarySearch(Modulation.values(), m);
     }
 
-    public static int getNodeId(NetworkNode node) {
-        return networkNodes.getOrDefault(node, -1);
-    }
 
-    public static INDArray getQvalues(NetworkNode source, NetworkNode destination, int v, long u) {
-        int s = getNodeId(source);
-        int d = getNodeId(destination);
-        Tuple<Integer, Integer> key = new Tuple<>(s, d);
-        int link = getLinkId(s,d);
+    public static INDArray getQvalues(int v, long u) {
 
-        if (link<0 || link >= linkMap.size()){
-            System.out.printf("Invalid link: %d, %d", s, d);
-        }
-        return qTable.get(NDArrayIndex.point(link),
+        return qTable.get(
                 NDArrayIndex.point(v),
                 NDArrayIndex.point(u),
                 NDArrayIndex.all());
