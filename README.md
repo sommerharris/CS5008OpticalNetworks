@@ -2,6 +2,8 @@
 
 Welcome to our optical network repository. Please find our research paper above, titled 'CS_5800_Q_Learning_Paper.pdf'
 
+[embed]CS_5800_Q_Learning_Paper.pdf[/embed]
+
 This contains work by Nolen Belle Bryant, Kwok Keung (Andriy) Chung, Jie Feng, Sommer Harris and Kristine Umeh for our algorithms course. The objective in this project is to learn about optical networks, and present an algorithm. The phases of the project, and relevant material are listed below:
 
 # Phase 1:
